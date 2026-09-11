@@ -1,5 +1,5 @@
 {
-  "description": "Refuse inline interpreter bodies in Bash tool calls so scripts are written to files and run by path.",
+  "description": "Refuse inline interpreter bodies in Bash tool calls, and warn as session context usage crosses 50% and each 10% band above.",
   "hooks": {
     "PreToolUse": [
       {
@@ -9,6 +9,18 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/no-inline-scripts.mjs\"",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/context-warn.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking context usage"
           }
         ]
       }

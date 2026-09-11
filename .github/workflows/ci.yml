@@ -15,3 +15,4 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/no-inline-scripts.test.mjs
+      - run: node scripts/context-warn.test.mjs

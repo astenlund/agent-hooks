@@ -1,6 +1,6 @@
 # Agent Hooks
 
-Claude Code hooks for disciplined agent shell usage, packaged as a plugin so they register themselves and update automatically.
+Claude Code hooks for disciplined agent sessions, packaged as a plugin so they register themselves and update automatically. Two hooks ship: `no-inline-scripts` refuses inline interpreter bodies in Bash calls, and `context-warn` warns as session context usage crosses 50% and each 10% band above.
 
 ## Install
 
@@ -11,7 +11,7 @@ claude plugin marketplace add astenlund/nightshift
 claude plugin install agent-hooks@astenlund
 ```
 
-Restart Claude Code after installing. With `autoUpdate` enabled on the marketplace, later releases are picked up at the next startup. To verify the hook is live, ask for a Bash call such as `node -e "1"` and expect it to be refused with the hook's message.
+Restart Claude Code after installing. With `autoUpdate` enabled on the marketplace, later releases are picked up at the next startup. To verify that `no-inline-scripts` is live, ask for a Bash call such as `node -e "1"` and expect it to be refused with the hook's message; `context-warn` shows itself the first time a session passes half its window.
 
 ## no-inline-scripts
 
@@ -28,12 +28,29 @@ A segment with a script argument passes, including a plain-data heredoc or pipe 
 
 Accepted cost: one-expression uses such as a JSON field pick are refused like any other inline body; use jq or a saved script. Text that merely mentions an inline shape, such as a commit message or an echoed string containing `node -e`, passes because the classifier looks at command words, not at quoted text. `pwsh -Command` and `bash -c` are deliberately not blocked.
 
+## context-warn
+
+A `UserPromptSubmit` hook that warns when session context usage crosses 50% of the model window, then again at each higher 10% band. Reasoning quality tends to degrade past the halfway mark; the warning nudges toward `/compact` or a fresh session at a natural boundary.
+
+It reads the tail of the session transcript (the path arrives on stdin), takes the latest assistant usage record, and computes context occupancy as `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`. Warned bands are deduplicated per session in a temp state file; compaction lowers the state so a re-crossing warns again. Fail-silent: any error exits 0 with no output, so the hook can never degrade a session.
+
+The window defaults to 1M tokens. On a machine that runs 200k-window sessions, set the override in the `env` block of `~/.claude/settings.json`, which Claude Code passes to hook processes:
+
+```json
+"env": {
+  "CLAUDE_CTX_WARN_WINDOW": "200000"
+}
+```
+
+Any finite positive number works.
+
 ## Development
 
-Node 22 or later, built-in modules only. Run the self-test after any edit to the hook:
+Node 22 or later, built-in modules only. Run both self-tests after any edit:
 
 ```
 node scripts/no-inline-scripts.test.mjs
+node scripts/context-warn.test.mjs
 ```
 
-It spawns the hook by path with Bash tool envelopes for every blocked and allowed shape, checks the exit code and stderr marker, and fails any case slower than two seconds. CI runs the same test on Windows. Every release that changes `hooks` or `scripts` needs a version increase in `.claude-plugin/plugin.json`, since the marketplace update check compares that field.
+The first spawns the hook by path with Bash tool envelopes for every blocked and allowed shape, checks the exit code and stderr marker, and fails any case slower than two seconds. The second writes transcripts with usage records into an isolated temp directory and checks when the warning fires, including band deduplication, compaction and the window override. CI runs both on Windows. Every release that changes `hooks` or `scripts` needs a version increase in `.claude-plugin/plugin.json`, since the marketplace update check compares that field.
