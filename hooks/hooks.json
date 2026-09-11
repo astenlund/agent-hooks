@@ -1,0 +1,17 @@
+{
+  "description": "Refuse inline interpreter bodies in Bash tool calls so scripts are written to files and run by path.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/no-inline-scripts.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

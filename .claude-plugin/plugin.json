@@ -1,0 +1,17 @@
+{
+  "name": "agent-hooks",
+  "displayName": "Agent Hooks",
+  "description": "Claude Code hooks for disciplined agent shell usage: refuses inline interpreter bodies so scripts are written to files and run by path.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Andreas Stenlund"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/astenlund/agent-hooks",
+  "repository": "https://github.com/astenlund/agent-hooks",
+  "keywords": [
+    "hooks",
+    "shell",
+    "guardrail"
+  ]
+}
