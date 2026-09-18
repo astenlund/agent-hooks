@@ -229,7 +229,7 @@ const allowed = [
   'echo x | node "$(git rev-parse --show-toplevel)/x.js"',
   'cat req.json | python $(git rev-parse --show-toplevel)/tools/t.py',
   'cat x | node $(pwd)',
-  // one-statement -c and -Command bodies, which the rule allows
+  // one-statement -c and -Command bodies, which are single commands rather than script bodies
   "bash -c 'echo hi'",
   "sh -c 'ls | wc -l'",
   'bash -c "grep a && echo found"',

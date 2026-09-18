@@ -17,9 +17,11 @@
 //     characters, an -EncodedCommand body, or a program from stdin
 // Statements in a body are counted as its interpreter reads them: unquoted
 // semicolons and newlines separate them, a single & too in a bash body. A
-// one-statement -c or -Command body passes because the rule this hook
-// enforces allows a one-liner there. A segment with a script argument
-// passes, including a plain-data heredoc or pipe feeding that script.
+// one-statement -c or -Command body passes, because a single short command
+// handed to a shell is not a script body; the statement and length limits
+// are a mechanical floor, not approval of everything that fits under them.
+// A segment with a script argument passes, including a plain-data heredoc
+// or pipe feeding that script.
 // Exits 2 with the reason on stderr to block; exits 0 on no match or
 // malformed input (fail-open). Registered by the plugin's hooks/hooks.json;
 // self-test: node scripts/no-inline-scripts.test.mjs
@@ -204,7 +206,7 @@ function statementCount(body, { escape, ampersand }) {
   return count + (pending ? 1 : 0);
 }
 
-// The verdict for a shell's -c or -Command body: a one-liner passes, as the rule allows it.
+// The verdict for a shell's -c or -Command body: a single short command is not a script body, so it passes.
 function classifyBody(name, flag, body, syntax) {
   if (body === undefined) return null;
   if (body === '-') return `${name} reading a program from stdin`;
