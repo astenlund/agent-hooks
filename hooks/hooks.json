@@ -1,9 +1,9 @@
 {
-  "description": "Refuse inline interpreter bodies in Bash tool calls, and warn as session context usage crosses 50% and each 10% band above.",
+  "description": "Refuse inline interpreter bodies in Bash and PowerShell tool calls, and warn as session context usage crosses 50% and each 10% band above.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",

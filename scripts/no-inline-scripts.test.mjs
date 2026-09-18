@@ -1,6 +1,7 @@
 // Self-test for no-inline-scripts.mjs: spawns the hook by path with a Bash
-// tool envelope on stdin and checks the exit code, the stderr marker and
-// the elapsed time. Run from the repository root:
+// tool envelope on stdin (or a PowerShell one, for a [command, tool] entry)
+// and checks the exit code, the stderr marker and the elapsed time. Run from
+// the repository root:
 //   node scripts/no-inline-scripts.test.mjs
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -96,6 +97,72 @@ const blocked = [
   'deno repl --eval "console.log(1)"',
   'node -e "$(unclosed',
   'echo "$(node -e 1',
+  // a shell -c or pwsh -Command body of more than one statement, in every spelling
+  'bash -c "echo a; echo b"',
+  "bash -lc 'echo a; echo b'",
+  'bash -ec "set -x; echo a"',
+  'bash -o pipefail -c "echo a; echo b"',
+  'sh -c "echo a\necho b"',
+  'zsh -c "echo a; echo b"',
+  "'C:/Program Files/Git/bin/bash.exe' -lc 'echo a; echo b'",
+  'pwsh -NoProfile -Command "$a = 1; Write-Host $a"',
+  'pwsh -NoProfile -ExecutionPolicy Bypass -Command "$a = 1; Write-Host $a"',
+  'pwsh -NoProfile -c "$a = 1; Write-Host $a"',
+  'pwsh -NoProfile -command "$a = 1; Write-Host $a"',
+  'pwsh -NoProfile -Comm "$a = 1; Write-Host $a"',
+  'pwsh -wd C:/x -Command "$a = 1; Write-Host $a"',
+  'pwsh -Command "Get-Date\nGet-Location"',
+  'powershell -NoProfile -Command "$a = 1; Write-Host $a"',
+  'pwsh -NoProfile -EncodedCommand ZwBjAGgAbwA=',
+  'pwsh -e ZwBjAGgAbwA=',
+  'pwsh -ec ZwBjAGgAbwA=',
+  'pwsh -NoProfile -Command -',
+  'bash -c -',
+  `bash -c "${'x'.repeat(201)}"`,
+  `pwsh -Command "${'x'.repeat(201)}"`,
+  'node x.js || bash -c "echo a; echo b"',
+  'bash -c "echo a; echo b" _ arg1',
+  'bash -c "sleep 1 & echo b"',
+  'bash -O extglob -c "echo a; echo b"',
+  'bash +o posix -c "echo a; echo b"',
+  'pwsh -cwa "$a = 1; Write-Host $a" x',
+  'pwsh -NoProfile -CommandWithArgs "$a = 1; Write-Host $a" x',
+  'pwsh -EncodedArguments AAAA -EncodedCommand ZwBjAGgAbwA=',
+  // a body is read by the interpreter that receives it: a backslash escapes in bash and is a path separator in pwsh
+  "pwsh -NoProfile -Command 'Write-Host \"C:\\Git\\\"; Get-Date'",
+  "pwsh -NoProfile -Command 'Write-Host \"a\\\"; Get-Date'",
+  "bash -c 'echo \"a`\"; echo b'",
+  // the same shapes issued through the PowerShell tool, in its dialect
+  ['node -e "const a = 1; console.log(a)"', 'PowerShell'],
+  ['C:\\tools\\node.exe -e "1"', 'PowerShell'],
+  ['& "C:\\Python312\\python.exe" -c "print(1)"', 'PowerShell'],
+  ["& 'C:\\Program Files\\nodejs\\node.exe' -p 1", 'PowerShell'],
+  ['python -c "print(1)"', 'PowerShell'],
+  ['py -3 -c "print(1)"', 'PowerShell'],
+  ['"print(1)" | python', 'PowerShell'],
+  ['"print(1)" | python -', 'PowerShell'],
+  ['Get-Content x.js | node', 'PowerShell'],
+  ['node -e "a`nb"', 'PowerShell'],
+  ['pwsh -NoProfile -Command "$a = 1; Write-Host $a"', 'PowerShell'],
+  ['& pwsh -NoProfile -Command "$a = 1; Write-Host $a"', 'PowerShell'],
+  ['Set-Location C:\\x; node -e "1"', 'PowerShell'],
+  ['$v = $(node -p "1")', 'PowerShell'],
+  ['bash -lc "echo a; echo b"', 'PowerShell'],
+  ["& 'C:\\Program Files\\Git\\bin\\bash.exe' -lc 'echo a; echo b'", 'PowerShell'],
+  ["pwsh -NoProfile -Command 'Write-Host \"C:\\Git\\\"; Get-Date'", 'PowerShell'],
+  ['pwsh -Command "Get-Date`nGet-Location"', 'PowerShell'],
+  // scriptblocks nest commands, and a block passed as the command is counted as a body
+  ['try { node -e "1" } catch { Write-Host x }', 'PowerShell'],
+  ['Invoke-Command -ScriptBlock { node -e "1" }', 'PowerShell'],
+  ['Get-ChildItem | Where-Object { $_.Length } | ForEach-Object { python -c "print(1)" }', 'PowerShell'],
+  ['gci | % { node -e "1" }', 'PowerShell'],
+  ['if ($x) { node -e "1" }', 'PowerShell'],
+  ['& { node -e "1" }', 'PowerShell'],
+  ['foreach ($f in $files) { bash -c "echo a; echo b" }', 'PowerShell'],
+  ['pwsh -NoProfile -Command { Get-Date; Get-Location }', 'PowerShell'],
+  ['& "C:\\Program Files\\PowerShell\\7\\pwsh.exe" -NoProfile -Command { $a = 1; Write-Host $a }', 'PowerShell'],
+  ['pwsh -Command { node -e "1" }', 'PowerShell'],
+  ['pwsh -Command { Get-Date; Get-Location', 'PowerShell'],
 ];
 const allowed = [
   'node --test tests/setup.test.js',
@@ -162,26 +229,76 @@ const allowed = [
   'echo x | node "$(git rev-parse --show-toplevel)/x.js"',
   'cat req.json | python $(git rev-parse --show-toplevel)/tools/t.py',
   'cat x | node $(pwd)',
+  // one-statement -c and -Command bodies, which the rule allows
+  "bash -c 'echo hi'",
+  "sh -c 'ls | wc -l'",
+  'bash -c "grep a && echo found"',
+  "bash -c 'echo \"a;b\"'",
+  'bash -c "echo \'a;b\'"',
+  "bash -c 'echo a\\;b'",
+  'bash -c "echo a\\\nb"',
+  'bash -c',
+  'bash --norc -c "echo hi"',
+  "pwsh -NoProfile -Command 'Get-Date'",
+  "pwsh -NoProfile -c 'Get-Date'",
+  'pwsh -NoProfile -Command Get-Date',
+  'pwsh -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem | Measure-Object"',
+  "pwsh -NoProfile -Command \"Write-Host 'a;b'\"",
+  'pwsh -NoProfile -Command "Write-Host `"a;b`""',
+  'pwsh -NoProfile -ExecutionPolicy Bypass -File C:/x/.tmp/script.ps1 -Name value',
+  'pwsh -Version',
+  'pwsh -NoProfile -Command',
+  'powershell -NoProfile -Command "Get-Date"',
+  `pwsh -Command "${'x'.repeat(200)}"`,
+  'bash -c "echo \\"$1\\"" _ arg1',
+  'bash -c "grep a && echo found & "',
+  'bash -c "cmd 2>&1"',
+  'bash -c "cmd &>/dev/null"',
+  'bash -c "cmd |& tee log"',
+  "bash -c 'echo \"a\\\";b\"'",
+  "pwsh -NoProfile -Command 'Write-Host \"a`\";b\"'",
+  'pwsh -NoProfile -Command "Get-ChildItem C:\\Git\\"',
+  'pwsh -cwa "Write-Host $args" x y',
+  // PowerShell tool text is itself a script; only nested interpreters count
+  ['$a = 1; Write-Host $a; Get-ChildItem', 'PowerShell'],
+  ['node C:\\x\\build.js', 'PowerShell'],
+  ['& "C:\\Program Files\\nodejs\\node.exe" build.js', 'PowerShell'],
+  ['Get-Content data.json | node handle.js', 'PowerShell'],
+  ['git commit -m "use node -e less"', 'PowerShell'],
+  ['Write-Host "a`tb"; node build.js', 'PowerShell'],
+  ['python -m pytest tests\\', 'PowerShell'],
+  ['pwsh -NoProfile -Command "Get-Date"', 'PowerShell'],
+  ['pwsh -NoProfile -File C:\\x\\.tmp\\script.ps1', 'PowerShell'],
+  ['$v = $(node build.js)', 'PowerShell'],
+  ['Write-Host "value: $(node version.js)"', 'PowerShell'],
+  ['try { node build.js } catch { Write-Host x }', 'PowerShell'],
+  ['Get-ChildItem | ForEach-Object { python check.py $_ }', 'PowerShell'],
+  ['pwsh -NoProfile -Command { Get-Date }', 'PowerShell'],
+  ['Write-Host "${env:PATH}"; node build.js', 'PowerShell'],
+  ['$h = @{ a = 1; b = 2 }; node build.js', 'PowerShell'],
+  ['Write-Host "a`nb"; node build.js', 'PowerShell'],
 ];
 
 let failures = 0;
-const run = command => {
+const run = entry => {
+  const [command, tool] = Array.isArray(entry) ? entry : [entry, 'Bash'];
   const started = Date.now();
-  const result = spawnSync(process.execPath, [hook], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command } }), encoding: 'utf8', windowsHide: true, timeout: 10000 });
+  const result = spawnSync(process.execPath, [hook], { input: JSON.stringify({ tool_name: tool, tool_input: { command } }), encoding: 'utf8', windowsHide: true, timeout: 10000 });
   return { ...result, ms: Date.now() - started };
 };
-for (const command of blocked) {
-  const result = run(command);
-  if (result.status !== 2 || !result.stderr.includes('Blocked by no-inline-scripts hook')) { failures++; console.log('NOT BLOCKED:', JSON.stringify(command), 'exit', result.status); }
-  if (result.ms > MAX_MS) { failures++; console.log('SLOW:', JSON.stringify(command), result.ms, 'ms'); }
+for (const entry of blocked) {
+  const result = run(entry);
+  if (result.status !== 2 || !result.stderr.includes('Blocked by no-inline-scripts hook')) { failures++; console.log('NOT BLOCKED:', JSON.stringify(entry), 'exit', result.status); }
+  if (result.ms > MAX_MS) { failures++; console.log('SLOW:', JSON.stringify(entry), result.ms, 'ms'); }
 }
-for (const command of allowed) {
-  const result = run(command);
-  if (result.status !== 0) { failures++; console.log('WRONGLY BLOCKED:', JSON.stringify(command), 'exit', result.status, result.stderr.trim().split('\n')[0]); }
-  if (result.ms > MAX_MS) { failures++; console.log('SLOW:', JSON.stringify(command), result.ms, 'ms'); }
+for (const entry of allowed) {
+  const result = run(entry);
+  if (result.status !== 0) { failures++; console.log('WRONGLY BLOCKED:', JSON.stringify(entry), 'exit', result.status, result.stderr.trim().split('\n')[0]); }
+  if (result.ms > MAX_MS) { failures++; console.log('SLOW:', JSON.stringify(entry), result.ms, 'ms'); }
 }
 const envelopes = [
-  ['non-Bash tool', JSON.stringify({ tool_name: 'Read', tool_input: { file_path: 'node -e' } })],
+  ['non-shell tool', JSON.stringify({ tool_name: 'Read', tool_input: { file_path: 'node -e' } })],
+  ['inherited property as a tool name', JSON.stringify({ tool_name: 'constructor', tool_input: { command: 'node -e 1' } })],
   ['malformed JSON', 'not json'],
   ['empty stdin', ''],
   ['missing tool_input', JSON.stringify({ tool_name: 'Bash' })],
