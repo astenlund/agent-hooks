@@ -1,7 +1,7 @@
 // Self-test for no-inline-scripts.mjs: spawns the hook by path with a Bash
 // tool envelope on stdin (or a PowerShell one, for a [command, tool] entry)
-// and checks the exit code, the stderr marker and the elapsed time. Run from
-// the repository root:
+// and checks the exit code, the stderr marker and the elapsed time, plus the
+// location advice in one refusal. Run from the repository root:
 //   node scripts/no-inline-scripts.test.mjs
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -296,6 +296,9 @@ for (const entry of allowed) {
   if (result.status !== 0) { failures++; console.log('WRONGLY BLOCKED:', JSON.stringify(entry), 'exit', result.status, result.stderr.trim().split('\n')[0]); }
   if (result.ms > MAX_MS) { failures++; console.log('SLOW:', JSON.stringify(entry), result.ms, 'ms'); }
 }
+// The refusal names a session-owned scratch folder and mentions no .tmp/ path.
+const advice = run('node -e "1"').stderr;
+if (!advice.includes("session's own scratch folder") || advice.includes('.tmp/')) { failures++; console.log('STALE LOCATION ADVICE:', JSON.stringify(advice)); }
 const envelopes = [
   ['non-shell tool', JSON.stringify({ tool_name: 'Read', tool_input: { file_path: 'node -e' } })],
   ['inherited property as a tool name', JSON.stringify({ tool_name: 'constructor', tool_input: { command: 'node -e 1' } })],
