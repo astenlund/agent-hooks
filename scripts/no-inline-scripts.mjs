@@ -297,5 +297,5 @@ const tool = input?.tool_name;
 if (typeof tool !== 'string' || !Object.hasOwn(DIALECTS, tool)) process.exit(0);
 const found = inspect(input.tool_input?.command, DIALECTS[tool]);
 if (!found) process.exit(0);
-process.stderr.write(`Blocked by no-inline-scripts hook (${found.rule}): ${found.snippet}\nWrite the script body to a .tmp/ or scratchpad file with the Write tool and run it by path. Use jq for a single JSON field pick, and keep a pwsh -Command or bash -c argument to one statement. Heredocs and pipes may carry plain data into a script run by path, never the script itself, and no inline fallback may be chained after a script file.\n`);
+process.stderr.write(`Blocked by no-inline-scripts hook (${found.rule}): ${found.snippet}\nWrite the script body to a file in your session's own scratch folder or the host's session scratchpad with the Write tool and run it by path. Use jq for a single JSON field pick, and keep a pwsh -Command or bash -c argument to one statement. Heredocs and pipes may carry plain data into a script run by path, never the script itself, and no inline fallback may be chained after a script file.\n`);
 process.exit(2);
