@@ -94,6 +94,7 @@ const blocked = [
   '(cd C:/x && node -e "1")',
   'echo $((1<<2))\nnode -e "1"',
   'stdbuf -oL node -e "1"',
+  'builtin exec node -e "1"',
   'deno repl --eval "console.log(1)"',
   'node -e "$(unclosed',
   'echo "$(node -e 1',
@@ -147,6 +148,9 @@ const blocked = [
   ['& pwsh -NoProfile -Command "$a = 1; Write-Host $a"', 'PowerShell'],
   ['Set-Location C:\\x; node -e "1"', 'PowerShell'],
   ['$v = $(node -p "1")', 'PowerShell'],
+  ['Write-Host (node -p "1") -ForegroundColor Red', 'PowerShell'],
+  ['Write-Host(node -p "1")', 'PowerShell'],
+  ['$a = @(node -p "1")', 'PowerShell'],
   ['bash -lc "echo a; echo b"', 'PowerShell'],
   ["& 'C:\\Program Files\\Git\\bin\\bash.exe' -lc 'echo a; echo b'", 'PowerShell'],
   ["pwsh -NoProfile -Command 'Write-Host \"C:\\Git\\\"; Get-Date'", 'PowerShell'],
@@ -277,6 +281,8 @@ const allowed = [
   ['Write-Host "${env:PATH}"; node build.js', 'PowerShell'],
   ['$h = @{ a = 1; b = 2 }; node build.js', 'PowerShell'],
   ['Write-Host "a`nb"; node build.js', 'PowerShell'],
+  ['Write-Host (Get-Date) -ForegroundColor Red; node build.js', 'PowerShell'],
+  ['if ($x) { node build.js } elseif ($y) { python check.py }', 'PowerShell'],
 ];
 
 let failures = 0;

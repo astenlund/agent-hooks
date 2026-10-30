@@ -7,7 +7,7 @@
 const KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'fi', 'do', 'done', 'while', 'until', 'case', 'esac', '{', '}', '!']);
 // Wrappers that run another command: their value-taking options and leading positionals are skipped.
 const WRAPPERS = {
-  env: { values: ['-u', '-C', '-S', '--unset', '--chdir'] }, command: {}, exec: {}, time: {}, nohup: {}, chronic: {},
+  env: { values: ['-u', '-C', '-S', '--unset', '--chdir'] }, command: {}, builtin: {}, exec: {}, time: {}, nohup: {}, chronic: {},
   sudo: { values: ['-u', '-g', '-C', '-p', '-r', '-t', '-U', '-h', '-D'] }, nice: { values: ['-n', '--adjustment'] },
   ionice: { values: ['-c', '-n', '-p'] }, timeout: { values: ['-s', '-k', '--signal', '--kill-after'], positionals: 1 },
   xargs: { values: ['-n', '-P', '-I', '-L', '-d', '-s', '-E', '-a'] }, stdbuf: { values: ['-i', '-o', '-e'] },
@@ -24,17 +24,19 @@ export const DIALECTS = {
   PowerShell: { escape: '`', substitutes: false, blocks: true, unescape: next => PWSH_ESCAPES[next] ?? next },
 };
 
-// Split into segments at unquoted |, |&, ||, &&, &, ;, newline, (, ), $( and
-// backticks; split each segment into words, stripping quotes. Heredoc bodies
+// Split into segments at unquoted |, |&, ||, &&, &, ;, newline, (, ), $(,
+// PowerShell's @( and backticks; split each segment into words, stripping
+// quotes. Heredoc bodies
 // are skipped so their content is never mistaken for commands; a herestring
 // operand is dropped and marks the segment as fed from stdin. Each segment
 // records its scope (the frame of the substitution, group or block enclosing
 // it, or null at the top level), its order of appearance in the source, since
 // a substitution's segments are returned ahead of the segment it sits in, and
-// whether it opens with a frame rather than a word. Each frame records its
-// parent frame and its owner: the segment whose words opened it, which is
-// every substitution's and block's, and a group's written as an argument
-// (Set-Location (Join-Path a b)), or null for a group standing as a command.
+// whether it opens with a frame rather than a word (an opening quote, or a
+// lone dot before a block, is not yet a word). Each frame records its parent
+// frame and its owner: the segment whose words opened it, which is every
+// substitution's and block's, and a group's written after a word, or null for
+// a group standing as a command.
 export function segments(command, dialect) {
   const { escape, substitutes, blocks, unescape } = dialect;
   const result = [];
@@ -45,7 +47,9 @@ export function segments(command, dialect) {
   // but restores the block's source text instead, so a block passed as a
   // -Command body can still be counted. A bare ( ... ) group is a command
   // delimiter instead: it cuts the enclosing segment and only the quote
-  // state is restored.
+  // state is restored. In PowerShell a group written after a word is an
+  // argument expression (Set-Location (Join-Path a b) -PassThru), so it
+  // nests like a substitution and the words after it stay in the segment.
   const frames = [];
   let created = 0;
   const newSegment = pipedIn => ({ words: [], pipedIn, stdinFed: false, scope: frames.at(-1) ?? null, order: created++, opensWithFrame: false });
@@ -57,10 +61,15 @@ export function segments(command, dialect) {
   const pendingDelimiters = [];
   const flush = () => { if (inWord && !dropWord) segment.words.push(word); if (inWord) dropWord = false; word = ''; inWord = false; };
   const cut = pipedIn => { flush(); result.push(segment); segment = newSegment(pipedIn); dropWord = false; };
+  // Whether the segment holds word text, so a frame opened now sits inside it.
+  // A lone dot does not count before a block, which it invokes in the current
+  // scope as & does in a child scope.
+  const counts = (item, closer) => closer !== '}' || item !== '.';
+  const started = closer => (word !== '' && counts(word, closer)) || segment.words.some(item => counts(item, closer));
   const open = (closer, arithmetic, splice, start) => {
-    const started = segment.words.length > 0 || inWord;
-    const owner = splice || started ? segment : null;
-    if (splice && !started) segment.opensWithFrame = true;
+    const begun = started(closer);
+    const owner = splice || begun ? segment : null;
+    if (splice && !begun) segment.opensWithFrame = true;
     if (!splice) cut(false);
     frames.push({ quote, closer, arithmetic, start, parent: frames.at(-1) ?? null, owner, outer: splice ? { segment, word, inWord, dropWord } : null });
     quote = null; segment = newSegment(false); word = ''; inWord = false; dropWord = false;
@@ -119,8 +128,18 @@ export function segments(command, dialect) {
       continue;
     }
     if (char === '&') { cut(false); if (command[index + 1] === '&') index++; continue; }
-    if (char === '$' && command[index + 1] === '(') { open(')', command[index + 2] === '(', true); index += command[index + 2] === '(' ? 2 : 1; continue; }
-    if (char === '(') { open(')', false, false); continue; }
+    if ((char === '$' || (blocks && char === '@')) && command[index + 1] === '(') { // @( is PowerShell's array subexpression
+      const arithmetic = char === '$' && command[index + 2] === '(';
+      open(')', arithmetic, true);
+      index += arithmetic ? 2 : 1;
+      continue;
+    }
+    if (char === '(') {
+      const argument = blocks && started(')');
+      if (argument) flush(); // the group ends the word before it, so cd($x) keeps cd as its command word
+      open(')', false, argument);
+      continue;
+    }
     if (substitutes && char === '`') { if (frames.length > 0 && frames[frames.length - 1].closer === '`') close(index); else open('`', false, true); continue; }
     if (char === ')') {
       if (frames.length > 0 && frames[frames.length - 1].closer === ')') { if (inArithmetic() && command[index + 1] === ')') index++; close(index); }

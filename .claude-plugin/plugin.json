@@ -1,7 +1,7 @@
 {
   "name": "agent-hooks",
   "displayName": "Agent Hooks",
-  "description": "Claude Code hooks for disciplined agent sessions: refuses inline interpreter bodies so scripts are written to files and run by path, and warns as context usage crosses 50% and each 10% band above.",
+  "description": "Claude Code hooks for disciplined agent sessions: refuses inline interpreter bodies so scripts are written to files and run by path, refuses a leading directory change chained into further commands, and warns as context usage crosses 50% and each 10% band above.",
   "version": "1.2.2",
   "author": {
     "name": "Andreas Stenlund"

@@ -15,4 +15,5 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/no-inline-scripts.test.mjs
+      - run: node scripts/no-cd-chains.test.mjs
       - run: node scripts/context-warn.test.mjs
