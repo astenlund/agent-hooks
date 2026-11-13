@@ -2,7 +2,8 @@
 // sed edit in text mode. Git Bash sed reads in text mode, so sed -i drops
 // each line's trailing CR, rewriting a CRLF file to LF even when nothing matches.
 // The command is split by shell-segments.mjs, so sed is found behind
-// wrappers (xargs, env, ...), keywords and assignments, and in any segment.
+// wrappers (xargs, env, ...), keywords and assignments, in any segment, and
+// in the command lists of find -exec, -execdir, -ok and -okdir.
 // In-place is -i in any short-option cluster (-i, -i.bak, -ni, -Ei) or
 // --in-place, also as an unambiguous prefix (--in) and with =SUFFIX; a value
 // taken by -e, -f, -l or -V, or by --expression, --file or --line-length
@@ -17,6 +18,8 @@ import { readFileSync } from 'node:fs';
 import { DIALECTS, baseName, commandWords, segments } from './shell-segments.mjs';
 
 const SEDS = new Set(['sed', 'gsed']);
+const FIND_ACTIONS = new Set(['-exec', '-execdir', '-ok', '-okdir']);
+const BATCHING_ACTIONS = new Set(['-exec', '-execdir']);
 const DISABLED_VALUES = new Set(['0', 'false']);
 // Short options whose value is the rest of the cluster or, when nothing follows, the next word
 // (V is undocumented in GNU sed 4.9 but takes a value all the same).
@@ -62,14 +65,40 @@ function editsInPlace(args) {
   return inPlace && !binary;
 }
 
-function inspect(command, dialect) {
-  if (typeof command !== 'string') return null;
-  for (const segment of segments(command, dialect)) {
-    const words = commandWords(segment.words);
-    if (words.length > 0 && SEDS.has(baseName(words[0])) && editsInPlace(words.slice(1))) return segment.words.join(' ').slice(0, 120);
+// Whether the word at a position ends a find action: a ;, or, for -exec and -execdir, a + right after {}
+// (any other + is an argument, and -ok and -okdir end only at ;).
+const endsAction = (action, args, position) => args[position] === ';' || (BATCHING_ACTIONS.has(action) && args[position] === '+' && args[position - 1] === '{}');
+
+// The commands a find invocation runs per match: the words after each -exec, -execdir, -ok or
+// -okdir up to its terminator (or the end of the segment, as when PowerShell cuts at ;).
+function findActions(args) {
+  const actions = [];
+  for (let index = 0; index < args.length; index++) {
+    if (!FIND_ACTIONS.has(args[index])) continue;
+    const end = args.findIndex((word, position) => position > index && endsAction(args[index], args, position));
+    actions.push(args.slice(index + 1, end < 0 ? args.length : end));
+    if (end < 0) break;
+    index = end;
   }
 
-  return null;
+  return actions;
+}
+
+// Whether a command, given as its words, is a text-mode in-place sed edit, directly or run by find.
+function isSedInPlace(words) {
+  const command = commandWords(words);
+  if (command.length === 0) return false;
+  const name = baseName(command[0]);
+  if (SEDS.has(name)) return editsInPlace(command.slice(1));
+
+  return name === 'find' && findActions(command.slice(1)).some(isSedInPlace);
+}
+
+function inspect(command, dialect) {
+  if (typeof command !== 'string') return null;
+  const found = segments(command, dialect).find(segment => isSedInPlace(segment.words));
+
+  return found ? found.words.join(' ').slice(0, 120) : null;
 }
 
 let input;

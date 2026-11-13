@@ -66,10 +66,22 @@ const blocked = [
   "for f in *.md; do sed -i 's/a/b/' \"$f\"; done",
   "if true; then sed -i 's/a/b/' file.txt; fi",
   "x=$(sed -i 's/a/b/' file.txt)",
+  // the command lists find runs per match
+  "find . -name '*.md' -exec sed -i 's/a/b/' {} +",
+  "find . -name '*.md' -exec sed -i 's/a/b/' {} \\;",
+  "find . -type f -execdir sed -i 's/a/b/' {} ';'",
+  "find . -ok sed --in-place 's/a/b/' {} \\;",
+  "find . -okdir sed -i 's/a/b/' {} \\;",
+  "find . -ok sed -e x {} + -i \\;", // -ok ends only at ;, so the + and -i are sed's
+  "find . -exec grep -q a {} \\; -exec sed -i 's/a/b/' {} +",
+  "/usr/bin/find . -exec env LC_ALL=C sed -i 's/a/b/' {} +",
+  "find . -exec sed -E 's/a/b/' + -i {} \\;", // a + not right after {} is an argument, so -i belongs to sed
   // the same shapes issued through the PowerShell tool
   ["sed -i 's/a/b/' C:\\Git\\x\\file.txt", 'PowerShell'],
   ["Get-ChildItem *.md | ForEach-Object { sed -i 's/a/b/' $_.FullName }", 'PowerShell'],
   ["& sed --in-place 's/a/b/' file.txt", 'PowerShell'],
+  ["find . -exec sed -i 's/a/b/' '{}' ';'", 'PowerShell'],
+  ["find . -exec sed -i 's/a/b/' {} ;", 'PowerShell'], // an unquoted ; ends the segment, and with it the action
 ];
 const allowed = [
   // sed without in-place editing
@@ -93,6 +105,15 @@ const allowed = [
   "sed -V -i file.txt",
   "sed -Vi file.txt",
   "sed 's/a/b/' -- -i",
+  // find runs sed without in-place editing, in binary mode, or not at all
+  "find . -name '*.md' -exec sed 's/a/b/' {} +",
+  "find . -exec sed -b -i 's/a/b/' {} +",
+  "find . -name sed -print",
+  "find . -exec grep -l sed {} +",
+  "find . -exec echo sed -i {} \\;",
+  "find . -exec grep -q a {} \\; -print -i",
+  "find . -exec echo + -exec sed -i x {} \\;", // the second -exec is an argument of echo
+  "find . -ok echo {} + -exec sed -i x {} \\;", // -ok runs only echo, up to the ;
   // ambiguous long prefixes select nothing
   "sed --s 's/a/b/' file.txt",
   // text that merely mentions sed -i, and other commands with -i
