@@ -5,12 +5,23 @@
 // separator, and a { scriptblock } nests commands), and finds each
 // segment's command word behind keywords, assignments and wrappers.
 const KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'fi', 'do', 'done', 'while', 'until', 'case', 'esac', '{', '}', '!']);
+// Every long option of each listed wrapper (GNU coreutils 8.32, findutils 4.10), so an abbreviation resolves as getopt resolves it.
+const LONG_OPTIONS = {
+  env: ['ignore-environment', 'null', 'unset', 'chdir', 'split-string', 'block-signal', 'default-signal', 'ignore-signal', 'list-signal-handling', 'debug', 'help', 'version'],
+  nice: ['adjustment', 'help', 'version'],
+  stdbuf: ['input', 'output', 'error', 'help', 'version'],
+  timeout: ['foreground', 'kill-after', 'preserve-status', 'signal', 'verbose', 'help', 'version'],
+  xargs: ['null', 'arg-file', 'delimiter', 'eof', 'replace', 'max-lines', 'max-args', 'open-tty', 'max-procs', 'interactive', 'process-slot-var', 'no-run-if-empty', 'max-chars', 'show-limits', 'verbose', 'exit', 'help', 'version'],
+};
 // Wrappers that run another command: their value-taking options and leading positionals are skipped.
+// A wrapper that lists its long options also has an unambiguous abbreviation of each recognised;
+// one marked dash also takes a bare - as an option (env - is env -i), and one that lists splits has options
+// whose value is itself the start of the command line (env -S 'sed -i' f runs sed -i f).
 const WRAPPERS = {
-  env: { values: ['-u', '-C', '-S', '--unset', '--chdir'] }, command: {}, builtin: {}, exec: {}, time: {}, nohup: {}, chronic: {},
-  sudo: { values: ['-u', '-g', '-C', '-p', '-r', '-t', '-U', '-h', '-D'] }, nice: { values: ['-n', '--adjustment'] },
-  ionice: { values: ['-c', '-n', '-p'] }, timeout: { values: ['-s', '-k', '--signal', '--kill-after'], positionals: 1 },
-  xargs: { values: ['-n', '-P', '-I', '-L', '-d', '-s', '-E', '-a'] }, stdbuf: { values: ['-i', '-o', '-e'] },
+  env: { values: ['-u', '-C', '--unset', '--chdir'], longs: LONG_OPTIONS.env, dash: true, splits: ['-S', '--split-string'] }, command: {}, builtin: {}, exec: {}, time: {}, nohup: {}, chronic: {},
+  sudo: { values: ['-u', '-g', '-C', '-p', '-r', '-t', '-U', '-h', '-D'] }, nice: { values: ['-n', '--adjustment'], longs: LONG_OPTIONS.nice },
+  ionice: { values: ['-c', '-n', '-p'] }, timeout: { values: ['-s', '-k', '--signal', '--kill-after'], positionals: 1, longs: LONG_OPTIONS.timeout },
+  xargs: { values: ['-n', '-P', '-I', '-L', '-d', '-s', '-E', '-a', '--max-args', '--max-procs', '--delimiter', '--max-chars', '--arg-file', '--process-slot-var'], longs: LONG_OPTIONS.xargs }, stdbuf: { values: ['-i', '-o', '-e', '--input', '--output', '--error'], longs: LONG_OPTIONS.stdbuf },
   function: { positionals: 1 },
 };
 
@@ -167,6 +178,32 @@ export const isRedirection = word => /^(?:\d*[<>]{1,2}&?\d*|&>>?|\d*[<>]{1,2}&?\
 export const isOption = word => word.startsWith('-') && word !== '-';
 export const baseName = word => word.split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, '');
 
+// The full spelling of a detached --name option among a wrapper's long options: the name itself, or the one
+// option it is an unambiguous prefix of. Any other word, including an ambiguous prefix, is returned unchanged.
+function fullLongOption(word, longs) {
+  if (!longs || !word.startsWith('--') || word.includes('=')) return word;
+  const name = word.slice(2);
+  const matches = longs.filter(option => option.startsWith(name));
+
+  return longs.includes(name) || matches.length !== 1 ? word : `--${matches[0]}`;
+}
+
+// The words a split option (env -S, --split-string, attached or detached) leaves in place of itself and its
+// value: the value split at spaces, ahead of the words after it, which env runs as one command line. Null when
+// the first word is not such an option.
+function splitWords(rest, wrapper) {
+  if (!wrapper.splits) return null;
+  const [word, next] = rest;
+  const isLong = word.startsWith('--');
+  const name = isLong ? fullLongOption(word.split('=')[0], wrapper.longs) : word.slice(0, 2);
+  if (!wrapper.splits.includes(name)) return null;
+  const equals = word.indexOf('=');
+  const attached = isLong ? (equals < 0 ? null : word.slice(equals + 1)) : (word.length > 2 ? word.slice(2) : null);
+  const value = attached ?? next ?? '';
+
+  return [...value.split(' ').filter(Boolean), ...rest.slice(attached === null ? 2 : 1)];
+}
+
 // Drop shell keywords, assignments and wrapper commands ahead of the real command word.
 export function commandWords(words) {
   let rest = words;
@@ -178,8 +215,10 @@ export function commandWords(words) {
     rest = rest.slice(1);
     let positionals = wrapper.positionals ?? 0;
     while (rest.length > 0) {
-      if (isAssignment(rest[0])) { rest = rest.slice(1); continue; }
-      if (isOption(rest[0])) { rest = rest.slice((wrapper.values ?? []).includes(rest[0]) ? 2 : 1); continue; }
+      if (isAssignment(rest[0]) || (wrapper.dash && rest[0] === '-')) { rest = rest.slice(1); continue; }
+      const split = splitWords(rest, wrapper);
+      if (split) { rest = split; continue; }
+      if (isOption(rest[0])) { rest = rest.slice((wrapper.values ?? []).includes(fullLongOption(rest[0], wrapper.longs)) ? 2 : 1); continue; }
       if (positionals > 0) { positionals--; rest = rest.slice(1); continue; }
       break;
     }
