@@ -19,7 +19,7 @@ A `PreToolUse` hook on the Bash and PowerShell tools that refuses inline interpr
 
 Blocked in any segment, including `||` fallbacks, `$(...)` substitutions and loop bodies:
 
-- `node`, `nodejs` and `bun` with `-e`, `-p`, `-pe`, `--eval` or `--print`
+- `node`, `nodejs` and `bun` with `-e`, `-p`, `-pe`, `-ep`, `--eval` or `--print`
 - `deno eval` and `deno --eval`
 - `python`, `python3`, `python3.x` and `py` with a `-c` option in any spelling (`-Bc`, `-c'body'`, `-cbody`)
 - `bash`, `sh` and `zsh` with a `-c` body (in any short-option cluster, such as `-lc`) of more than one statement or over 200 characters

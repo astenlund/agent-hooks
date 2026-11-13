@@ -18,6 +18,7 @@ const blocked = [
   'node --eval="1+1"',
   'node -p "process.versions.node"',
   'node -pe "1"',
+  'bun -ep "1"', // bun reads -ep as -e with the attached body "p"; node rejects -ep
   'node.exe -e "1"',
   'node "-e" "1"',
   'MSYS_NO_PATHCONV=1 node -e "1"',
