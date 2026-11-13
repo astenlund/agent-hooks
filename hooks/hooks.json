@@ -1,5 +1,5 @@
 {
-  "description": "Refuse inline interpreter bodies in Bash and PowerShell tool calls, refuse a leading directory change chained into further commands, and warn as session context usage crosses 50% and each 10% band above.",
+  "description": "Refuse inline interpreter bodies in Bash and PowerShell tool calls, refuse a leading directory change chained into further commands, refuse an in-place sed edit in text mode on Windows, and warn as session context usage crosses 50% and each 10% band above.",
   "hooks": {
     "PreToolUse": [
       {
@@ -13,6 +13,11 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/no-cd-chains.mjs\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/no-sed-in-place.mjs\"",
             "timeout": 10
           }
         ]

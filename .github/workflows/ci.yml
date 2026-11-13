@@ -16,4 +16,14 @@ jobs:
           node-version: 22
       - run: node scripts/no-inline-scripts.test.mjs
       - run: node scripts/no-cd-chains.test.mjs
+      - run: node scripts/no-sed-in-place.test.mjs
       - run: node scripts/context-warn.test.mjs
+  # no-sed-in-place only refuses on Windows; this job covers its pass-through on Linux.
+  self-test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: node scripts/no-sed-in-place.test.mjs

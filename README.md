@@ -1,6 +1,6 @@
 # Agent Hooks
 
-Claude Code hooks for disciplined agent sessions, packaged as a plugin so they register themselves and update automatically. Three hooks ship: `no-inline-scripts` refuses inline interpreter bodies in Bash and PowerShell calls, `no-cd-chains` refuses a leading directory change chained into further commands, and `context-warn` warns as session context usage crosses 50% and each 10% band above.
+Claude Code hooks for disciplined agent sessions, packaged as a plugin so they register themselves and update automatically. Four hooks ship: `no-inline-scripts` refuses inline interpreter bodies in Bash and PowerShell calls, `no-cd-chains` refuses a leading directory change chained into further commands, `no-sed-in-place` refuses an in-place `sed` edit in text mode on Windows, and `context-warn` warns as session context usage crosses 50% and each 10% band above.
 
 ## Install
 
@@ -11,7 +11,7 @@ claude plugin marketplace add astenlund/nightshift
 claude plugin install agent-hooks@astenlund
 ```
 
-Restart Claude Code after installing. With `autoUpdate` enabled on the marketplace, later releases are picked up at the next startup. To verify that `no-inline-scripts` is live, ask for a Bash call such as `node -e "1"` and expect it to be refused with the hook's message; likewise `cd .. && ls` for `no-cd-chains`. `context-warn` shows itself the first time a session passes half its window.
+Restart Claude Code after installing. With `autoUpdate` enabled on the marketplace, later releases are picked up at the next startup. To verify that `no-inline-scripts` is live, ask for a Bash call such as `node -e "1"` and expect it to be refused with the hook's message; likewise `cd .. && ls` for `no-cd-chains` and, on Windows, `sed -i 's/a/b/' x.txt` for `no-sed-in-place`. `context-warn` shows itself the first time a session passes half its window.
 
 ## no-inline-scripts
 
@@ -46,6 +46,22 @@ The hook is on by default, since chaining a directory change into the command is
 
 The values `0` and `false` (in any letter case) turn it off; anything else, or no value, leaves it on.
 
+## no-sed-in-place
+
+A `PreToolUse` hook on the Bash and PowerShell tools that, on Windows, refuses a `sed` (or `gsed`) command that edits a file in place in text mode. Git Bash `sed` reads in text mode: it drops each line's trailing CR and does not write it back, so `sed -i` rewrites a CRLF file to LF even when no substitution fires, and a file whose committed copy is CRLF then shows every line as changed. On other platforms the hook allows everything.
+
+In place means `-i` in any short-option cluster (`-i`, `-i.bak`, `-ni`, `-Ei`) or `--in-place`, with or without `=SUFFIX` and as any unambiguous prefix such as `--in`. A value taken by `-e`, `-f` or `-l`, attached or as the next word, is not an option, so `sed -ei file` and `sed -e -i file` pass, and nothing after `--` counts. Binary mode (`-b` or `--binary`) keeps every CR, so `sed -b -i` passes; a pattern anchored on `$` must then match the CR explicitly. The command is split by the same parser the other two `PreToolUse` hooks use, so `sed` is found in every segment and behind wrappers such as `xargs` and `env`, but not where it is only an argument of another command, as in `find -exec sed -i ...`, or inside a `bash -c` body. On a match the hook exits 2 with a reason that tells the model to make the edit with the Edit tool, or, when the edit involves an escape sequence the Edit tool would decode, with a byte-level script run by path that builds each backslash from its code point. Fail-open: malformed input or an envelope from any other tool exits 0.
+
+The hook is on by default, since the Bash tool runs Git Bash on Windows. Where Git Bash's `sed` is not the one your Bash and PowerShell calls run, turn the hook off in the `env` block of `~/.claude/settings.json`, which Claude Code passes to hook processes:
+
+```json
+"env": {
+  "CLAUDE_NO_SED_IN_PLACE": "0"
+}
+```
+
+The values `0` and `false` (in any letter case) turn it off; anything else, or no value, leaves it on.
+
 ## context-warn
 
 A `UserPromptSubmit` hook that warns when session context usage crosses 50% of the model window, then again at each higher 10% band. Reasoning quality tends to degrade past the halfway mark; the warning nudges toward `/compact` or a fresh session at a natural boundary.
@@ -69,7 +85,8 @@ Node 22 or later, built-in modules only. Run every self-test after any edit:
 ```
 node scripts/no-inline-scripts.test.mjs
 node scripts/no-cd-chains.test.mjs
+node scripts/no-sed-in-place.test.mjs
 node scripts/context-warn.test.mjs
 ```
 
-The first two spawn their hook by path with Bash and PowerShell tool envelopes for every blocked and allowed shape, check the exit code and stderr marker, and fail any case slower than two seconds; the `no-cd-chains` test also checks that its switch turns the hook off. The third writes transcripts with usage records into an isolated temp directory and checks when the warning fires, including band deduplication, compaction and the window override. CI runs all three on Windows. Every release that changes `hooks` or `scripts` needs a version increase in `.claude-plugin/plugin.json`, since the marketplace update check compares that field.
+The first three spawn their hook by path with Bash and PowerShell tool envelopes for every blocked and allowed shape, check the exit code and stderr marker, and fail any blocked or allowed case slower than two seconds; the `no-cd-chains` and `no-sed-in-place` tests also check that their switch turns the hook off, and the `no-sed-in-place` test expects every case to pass off Windows. The last writes transcripts with usage records into an isolated temp directory and checks when the warning fires, including band deduplication, compaction and the window override. CI runs all four on Windows, and the `no-sed-in-place` test on Linux as well. Every release that changes `hooks` or `scripts` needs a version increase in `.claude-plugin/plugin.json`, since the marketplace update check compares that field.
