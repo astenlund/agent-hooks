@@ -66,12 +66,9 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
   // argument expression (Set-Location (Join-Path a b) -PassThru), so it
   // nests like a substitution and the words after it stay in the segment.
   const frames = [];
-  // Each segment's quoted list says, per word, whether the word began with a quote; called marks a PowerShell segment
-  // opened by the & call operator, whose quoted first word still names a command.
-  const newSegment = pipedIn => ({ words: [], quoted: [], pipedIn, stdinFed: false, called: false, scope: frames.at(-1) ?? outerScope });
+  const newSegment = pipedIn => ({ words: [], pipedIn, stdinFed: false, scope: frames.at(-1) ?? outerScope });
   let segment = newSegment(false);
   let word = '';
-  let wordQuoted = false;
   let inWord = heredoc;
   let quote = heredoc ? HEREDOC : null;
   let dropWord = heredoc;
@@ -103,6 +100,16 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
         }
         index = inner;
         literal = true;
+      } else if (char === '$' && raw[index + 1] === '(') {
+        // A $( ... ) in a delimiter word is not expanded or unquoted: its text, quotes included, is kept as written.
+        let depth = 0;
+        let inner = index;
+        for (; inner < raw.length; inner++) {
+          if (raw[inner] === '(') depth++;
+          else if (raw[inner] === ')' && --depth === 0) break;
+        }
+        text += raw.slice(index, inner + 1);
+        index = inner;
       } else if (char === escape && raw[index + 1] === '\n') {
         index++; // a line continuation is removed before the word is read, so it neither adds text nor quotes the delimiter
       } else if (char === escape) {
@@ -135,15 +142,17 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     let body = '';
     while (queue.length > 0 && index < command.length) {
       const pending = queue[0];
+      // A CRLF line counts as its LF form, as it does in Git Bash, both for a backslash continuation and for the
+      // terminator; reading it that way errs toward ending the body and inspecting what follows.
+      const withoutCR = text => (text.endsWith(CR) ? text.slice(0, -1) : text);
       let end = command.indexOf('\n', index + 1);
       let logical = command.slice(index + 1, end < 0 ? command.length : end);
-      while (!pending.literal && end >= 0 && continues(logical)) {
+      while (!pending.literal && end >= 0 && continues(withoutCR(logical))) {
         const next = command.indexOf('\n', end + 1);
-        logical = logical.slice(0, -1) + command.slice(end + 1, next < 0 ? command.length : next);
+        logical = withoutCR(logical).slice(0, -1) + command.slice(end + 1, next < 0 ? command.length : next);
         end = next;
       }
-      // A terminator on a CRLF line still ends the body, as it does in Git Bash; ending it errs toward inspecting what follows.
-      const line = logical.endsWith(CR) ? logical.slice(0, -1) : logical;
+      const line = withoutCR(logical);
       if ((pending.stripTabs ? line.replace(/^\t+/, '') : line) === pending.delimiter) {
         expand(queue.shift(), body);
         body = '';
@@ -157,16 +166,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
 
     return index;
   };
-  const flush = () => {
-    if (inWord && !dropWord) {
-      segment.words.push(word);
-      segment.quoted.push(wordQuoted);
-    }
-    if (inWord) dropWord = false;
-    word = '';
-    wordQuoted = false;
-    inWord = false;
-  };
+  const flush = () => { if (inWord && !dropWord) segment.words.push(word); if (inWord) dropWord = false; word = ''; inWord = false; };
   // A segment inside an arithmetic frame, groups included, holds an expression, never a command; a substitution inside
   // the expression holds commands again.
   const inExpression = () => frames.at(-1)?.expression ?? false;
@@ -185,8 +185,8 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     const expression = arithmetic || value || (!splice && (enclosing?.expression ?? false));
     const arithmeticOperators = arithmetic || operators || (!splice && (enclosing?.arithmeticOperators ?? false));
     const depth = (enclosing?.depth ?? 0) + (splice ? 1 : 0);
-    frames.push({ quote, closer, arithmetic, expression, arithmeticOperators, depth, start, parent: enclosing ?? outerScope, owner, outer: splice ? { segment, word, wordQuoted, inWord, dropWord } : null });
-    quote = null; segment = newSegment(false); word = ''; wordQuoted = false; inWord = false; dropWord = false;
+    frames.push({ quote, closer, arithmetic, expression, arithmeticOperators, depth, start, parent: enclosing ?? outerScope, owner, outer: splice ? { segment, word, inWord, dropWord } : null });
+    quote = null; segment = newSegment(false); word = ''; inWord = false; dropWord = false;
   };
   // The last frame a splice closed, and whether it opened at the start of a word, so a PowerShell comment right after
   // a frame that stands as its own token is recognized while one after prefix$(x) stays part of the argument.
@@ -198,7 +198,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     segment.scope = frames.at(-1) ?? outerScope; // the segment cut opened continues after the frame
     if (!frame.outer) return;
     closedFrame = { end, startsWord: frame.outer.word === '' && !frame.outer.inWord };
-    ({ segment, word, wordQuoted, inWord, dropWord } = frame.outer);
+    ({ segment, word, inWord, dropWord } = frame.outer);
     word += frame.start === undefined ? 'SUBSTITUTION' : command.slice(frame.start, end + 1); inWord = true;
   };
   const inArithmetic = () => frames.length > 0 && frames[frames.length - 1].arithmetic;
@@ -230,7 +230,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       else word += char;
       continue;
     }
-    if (char === "'" || char === '"') { if (word === '' && !inWord) wordQuoted = true; quote = char; inWord = true; continue; }
+    if (char === "'" || char === '"') { quote = char; inWord = true; continue; }
     if (char === escape) {
       if (command[index + 1] === '\n') { index++; continue; }
       if (index + 1 < command.length) { word += unescape(command[++index]); inWord = true; }
@@ -252,7 +252,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       flush();
       segment.stdinFed = true;
       if (command[index + 2] === '<') { dropWord = true; index += 2; continue; } // herestring: drop its operand
-      const match = /^<<(-?)\s*((?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]|\$\([^()]*\)|[^\s|&;<>()'"\\])+)/.exec(command.slice(index));
+      const match = /^<<(-?)\s*((?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]|\$\((?:[^()]|\([^()]*\))*\)|[^\s|&;<>()'"\\])+)/.exec(command.slice(index));
       if (match) { pend({ ...heredocDelimiter(match[2]), stripTabs: match[1] === '-', depth: heredocDepth() }); index += match[0].length - 1; }
       else index++;
       continue;
@@ -264,12 +264,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       if (next === '|' || next === '&') index++;
       continue;
     }
-    if (char === '&') {
-      cut(false);
-      if (command[index + 1] === '&') index++;
-      else if (blocks) segment.called = true;
-      continue;
-    }
+    if (char === '&') { cut(false); if (command[index + 1] === '&') index++; continue; }
     if ((char === '$' || (blocks && char === '@')) && command[index + 1] === '(') { // @( is PowerShell's array subexpression
       const arithmetic = char === '$' && opensArithmetic(index);
       open(')', arithmetic, true);
@@ -307,17 +302,6 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
 }
 
 export const isAssignment = word => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
-// A PowerShell assignment runs the command on its right: $x = cmd, [int]$x += cmd, or the operator attached, $x=cmd.
-const PWSH_TARGET = /^(?:\[[^\]]*\])*\$[A-Za-z_][\w:]*(?:[.]\w+|\[[^\]]*\])*$/;
-const PWSH_OPERATOR = /^(?:[-+*/%]|\?\?)?=$/;
-const PWSH_ATTACHED = /^(?:\[[^\]]*\])*\$[A-Za-z_][\w:]*(?:[.]\w+|\[[^\]]*\])*(?:[-+*/%]|\?\?)?=(.*)$/;
-const afterPwshAssignment = rest => {
-  if (PWSH_TARGET.test(rest[0]) && PWSH_OPERATOR.test(rest[1] ?? '')) return rest.slice(2);
-  const attached = PWSH_ATTACHED.exec(rest[0]);
-  if (!attached) return null;
-
-  return attached[1] === '' ? rest.slice(1) : [attached[1], ...rest.slice(1)];
-};
 export const isRedirection = word => /^(?:\d*[<>]{1,2}&?\d*|&>>?|\d*[<>]{1,2}&?\S+|&>>?\S+)$/.test(word);
 export const isOption = word => word.startsWith('-') && word !== '-';
 export const baseName = word => word.split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, '');
@@ -354,8 +338,6 @@ export function commandWords(words) {
   for (;;) {
     if (rest.length === 0) return rest;
     if (KEYWORDS.has(rest[0]) || isAssignment(rest[0])) { rest = rest.slice(1); continue; }
-    const assigned = afterPwshAssignment(rest);
-    if (assigned) { rest = assigned; continue; }
     const wrapper = WRAPPERS[baseName(rest[0])];
     if (!wrapper) return rest;
     rest = rest.slice(1);

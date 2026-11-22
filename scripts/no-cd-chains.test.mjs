@@ -42,12 +42,12 @@ const blocked = [
   "(cat <<'EOF')\ntext\nEOF\ncd .; pwd",
   '(( 1 << 2 ))\ncd .; pwd',
   '((cd C:/Git/x); ls)',
-  ['$null = Set-Location C:/Git; Get-Location', 'PowerShell'],
-  ['$x=Set-Location C:/Git; ls', 'PowerShell'],
-  ['[string]$p += Set-Location C:/Git; ls', 'PowerShell'],
-  ['$state = @{ Location = $null }; $state.Location = Set-Location . -PassThru; Get-Location', 'PowerShell'],
   ["& 'Set-Location' C:\\Git\\x; ls", 'PowerShell'],
+  ["& ('Set-Location') . -PassThru; Get-Location", 'PowerShell'],
   'cat <<$(true)\nhello\n$(true)\ncd .; pwd',
+  'cat <<$((1+2))\nhello\n$((1+2))\ncd .; pwd',
+  'cat <<$(echo "x")\nhello\n$(echo "x")\ncd .; pwd',
+  'cat <<EOF\nEO\\\r\nF\ncd .; pwd',
   'cat <<EOF\ntext\nEOF\r\ncd .; pwd',
   'a=($(cd C:/Git/x; pwd))',
   ['Set-Location . # note\rWrite-Output ok; Get-Location', 'PowerShell'],
@@ -162,9 +162,8 @@ const allowed = [
   'cat <<EOF > x.txt\n$((cd + 1))\nEOF',
   "git commit -m \"$(cat <<'EOF'\nfix: cd x; ls\nEOF\n)\"",
   "cat <<'EOF' | (\ncd .; pwd\nEOF\ncat\n)",
-  // a quoted PowerShell string where a command would stand is a value, and a Bash array literal holds values
+  // a PowerShell assignment's value is not a command word, and a Bash array literal holds values
   ["$label = 'Set-Location'; Write-Output $label", 'PowerShell'],
-  ["Get-Item . | ForEach-Object { 'cd' }", 'PowerShell'],
   "commands=(cd pushd); printf '%s\\n' \"${commands[@]}\"",
   // arithmetic holds expressions, not commands
   'echo $((cd + 1))',

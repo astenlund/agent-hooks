@@ -93,6 +93,8 @@ const blocked = [
 const allowed = [
   // comment text is never read as commands
   "ls # note; sed -i 's/a/b/' file.txt",
+  // a PowerShell assignment's value is not a command word
+  ["$isSed = 'sed' -in $tools", 'PowerShell'],
   // sed without in-place editing
   "sed 's/a/b/' file.txt",
   "sed -n '1,5p' file.txt",
