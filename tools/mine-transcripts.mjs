@@ -13,8 +13,9 @@ const self = basename(process.argv[1], '.mjs');
 // alone also appears in ordinary output (test runs, the hook's own source).
 const MARKER = /^PreToolUse:\w+ hook error: [^\n]*?Blocked by (no-[a-z-]+) hook/;
 
-// A result's text, from a string or an array of parts; a part whose text is not a string contributes nothing.
-const text = content => (typeof content === 'string' ? content : Array.isArray(content) ? content.map(part => (typeof part?.text === 'string' ? part.text : '')).join('\n') : '');
+// A result's text, from a string or an array of parts; a part whose text is not a string is left out entirely, so it
+// cannot push the hook error line off the start of the text.
+const text = content => (typeof content === 'string' ? content : Array.isArray(content) ? content.filter(part => typeof part?.text === 'string').map(part => part.text).join('\n') : '');
 
 function transcripts(root) {
   const files = [];
