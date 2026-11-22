@@ -82,7 +82,10 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       const char = raw[index];
       if (char === "'" || char === '"') {
         const close = raw.indexOf(char, index + 1);
-        text += raw.slice(index + 1, close);
+        for (let inner = index + 1; inner < close; inner++) {
+          if (char === '"' && raw[inner] === escape && DQ_ESCAPABLE.has(raw[inner + 1])) inner++; // double quotes keep only escapes of $ ` " \ and newline
+          text += raw[inner];
+        }
         index = close;
         literal = true;
       } else if (char === escape) {
@@ -102,29 +105,28 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
   };
   const expand = (pending, body) => { if (!pending.literal && body !== '') result.push(...segments(body, dialect, { heredoc: true, outerScope: frames.at(-1) ?? outerScope })); };
   const pendingAt = depth => pendingDelimiters.findIndex(pending => pending.depth === depth);
+  // Only a substitution nests heredoc reading; a bare group's newline still collects the bodies pending around it.
+  const heredocDepth = () => frames.filter(frame => frame.outer).length;
   // Reads the bodies of the heredocs pending at the current depth, which begin after the newline at index; each runs to
   // the line that equals its delimiter (after leading tabs are removed, for <<-), or to the end of the command when it is
   // never terminated. Returns the index of the last character read.
   const readHeredocs = start => {
-    const depth = frames.length;
+    const depth = heredocDepth();
     let index = start;
     let body = '';
     for (let at = pendingAt(depth); at >= 0 && index < command.length; at = pendingAt(depth)) {
       const pending = pendingDelimiters[at];
       let end = command.indexOf('\n', index + 1);
-      let line = command.slice(index + 1, end < 0 ? command.length : end);
-      let logical = line;
+      let logical = command.slice(index + 1, end < 0 ? command.length : end);
       while (!pending.literal && end >= 0 && continues(logical)) {
         const next = command.indexOf('\n', end + 1);
-        const more = command.slice(end + 1, next < 0 ? command.length : next);
-        logical = logical.slice(0, -1) + more;
-        line += `\n${more}`;
+        logical = logical.slice(0, -1) + command.slice(end + 1, next < 0 ? command.length : next);
         end = next;
       }
       if ((pending.stripTabs ? logical.replace(/^\t+/, '') : logical) === pending.delimiter) {
         expand(pendingDelimiters.splice(at, 1)[0], body);
         body = '';
-      } else body += `${line}\n`;
+      } else body += `${logical}\n`; // joined, as bash expands it
       index = end < 0 ? command.length : end;
     }
     for (let at = pendingAt(depth); at >= 0; at = pendingAt(depth)) {
@@ -168,6 +170,8 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     word += frame.start === undefined ? 'SUBSTITUTION' : command.slice(frame.start, end + 1); inWord = true;
   };
   const inArithmetic = () => frames.length > 0 && frames[frames.length - 1].arithmetic;
+  // $(( opens arithmetic only in Bash; in PowerShell it is a subexpression holding a group.
+  const opensArithmetic = index => substitutes && command[index + 2] === '(';
   // A comment runs to the end of its line, or, inside a backtick substitution, to its closing backtick, since
   // bash reads the substitution's body before parsing it; an escaped backtick does not close it.
   const commentEnd = from => {
@@ -189,7 +193,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       if (char === quote) quote = null;
       else if (char === escape && expands && command[index + 1] === '\n') index++; // line continuation
       else if (char === escape && expands && (!substitutes || DQ_ESCAPABLE.has(command[index + 1]))) word += unescape(command[++index]);
-      else if (expands && char === '$' && command[index + 1] === '(') { open(')', command[index + 2] === '(', true); index += command[index + 2] === '(' ? 2 : 1; }
+      else if (expands && char === '$' && command[index + 1] === '(') { const arithmetic = opensArithmetic(index); open(')', arithmetic, true); index += arithmetic ? 2 : 1; }
       else if (substitutes && expands && char === '`') open('`', false, true);
       else word += char;
       continue;
@@ -201,7 +205,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       continue;
     }
     // A # that starts a word opens a comment in both dialects, so its text is never read as commands; inside a word, as in $# or a#b, it is literal.
-    if (char === '#' && atWordStart(index) && !inArithmetic()) { index = commentEnd(index) - 1; continue; }
+    if (char === '#' && atWordStart(index) && !inExpression()) { index = commentEnd(index) - 1; continue; }
     if (blocks && char === '<' && command[index + 1] === '#' && atWordStart(index)) { // a PowerShell <# block comment #>
       const end = command.indexOf('#>', index + 2);
       index = end < 0 ? command.length : end + 1;
@@ -212,12 +216,12 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       index = readHeredocs(index);
       continue;
     }
-    if (char === '<' && command[index + 1] === '<' && !inArithmetic()) {
+    if (char === '<' && command[index + 1] === '<' && !inExpression()) {
       flush();
       segment.stdinFed = true;
       if (command[index + 2] === '<') { dropWord = true; index += 2; continue; } // herestring: drop its operand
       const match = /^<<(-?)\s*((?:'[^']*'|"[^"]*"|\\.|[^\s|&;<>'"\\])+)/.exec(command.slice(index));
-      if (match) { pendingDelimiters.push({ ...heredocDelimiter(match[2]), stripTabs: match[1] === '-', depth: frames.length }); index += match[0].length - 1; }
+      if (match) { pendingDelimiters.push({ ...heredocDelimiter(match[2]), stripTabs: match[1] === '-', depth: heredocDepth() }); index += match[0].length - 1; }
       else index++;
       continue;
     }
@@ -230,7 +234,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     }
     if (char === '&') { cut(false); if (command[index + 1] === '&') index++; continue; }
     if ((char === '$' || (blocks && char === '@')) && command[index + 1] === '(') { // @( is PowerShell's array subexpression
-      const arithmetic = char === '$' && command[index + 2] === '(';
+      const arithmetic = char === '$' && opensArithmetic(index);
       open(')', arithmetic, true);
       index += arithmetic ? 2 : 1;
       continue;

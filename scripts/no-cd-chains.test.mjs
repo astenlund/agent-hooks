@@ -30,6 +30,11 @@ const blocked = [
   'cat <<EOF\nEO\\\nF\ncd .; pwd',
   'cat <<-EOF\n\tdata\n\tEOF\ncd .; pwd',
   'echo $(( $(cd C:/Git/x; pwd) + 1 ))',
+  'cat <<"E\\\\OF"\ndata\nE\\OF\ncd .; pwd',
+  'cat <<"E\\$OF"\ndata\nE$OF\ncd .; pwd',
+  'cat <<EOF\n$\\\n(cd .; pwd)\nEOF',
+  'echo $(( (1 << 2\n) ))\ncd .; pwd',
+  ['$((Set-Location .)); Get-Location', 'PowerShell'],
   ['Write-Output prefix$(Write-Output ok)#suffix; Set-Location .', 'PowerShell'],
   // a directory change chained by every separator the shell reads
   'cd C:/Git/x && npm test',
@@ -140,6 +145,7 @@ const allowed = [
   "cat <<'EOF' > x.txt\n\tEOF\ncd .; pwd\nEOF",
   'cat <<EOF > x.txt\n$((cd + 1))\nEOF',
   "git commit -m \"$(cat <<'EOF'\nfix: cd x; ls\nEOF\n)\"",
+  "cat <<'EOF' | (\ncd .; pwd\nEOF\ncat\n)",
   // arithmetic holds expressions, not commands
   'echo $((cd + 1))',
   'echo $(( (cd + 1) * 2 ))',
