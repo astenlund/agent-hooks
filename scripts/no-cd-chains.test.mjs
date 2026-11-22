@@ -32,6 +32,7 @@ const blocked = [
   'echo $(( $(cd C:/Git/x; pwd) + 1 ))',
   'cat <<"E\\\\OF"\ndata\nE\\OF\ncd .; pwd',
   'cat <<"E\\$OF"\ndata\nE$OF\ncd .; pwd',
+  'cat <<"E\\"OF"\ndata\nE"OF\ncd .; pwd',
   'cat <<EOF\n$\\\n(cd .; pwd)\nEOF',
   'echo $(( (1 << 2\n) ))\ncd .; pwd',
   ['$((Set-Location .)); Get-Location', 'PowerShell'],

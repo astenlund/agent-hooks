@@ -80,13 +80,19 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     let literal = false;
     for (let index = 0; index < raw.length; index++) {
       const char = raw[index];
-      if (char === "'" || char === '"') {
+      if (char === "'") {
         const close = raw.indexOf(char, index + 1);
-        for (let inner = index + 1; inner < close; inner++) {
-          if (char === '"' && raw[inner] === escape && DQ_ESCAPABLE.has(raw[inner + 1])) inner++; // double quotes keep only escapes of $ ` " \ and newline
+        text += raw.slice(index + 1, close);
+        index = close;
+        literal = true;
+      } else if (char === '"') {
+        // Double quotes keep only escapes of $ ` " \ and newline, and a backslash-newline disappears with its newline.
+        let inner = index + 1;
+        for (; inner < raw.length && raw[inner] !== '"'; inner++) {
+          if (raw[inner] === escape && DQ_ESCAPABLE.has(raw[inner + 1]) && raw[++inner] === '\n') continue;
           text += raw[inner];
         }
-        index = close;
+        index = inner;
         literal = true;
       } else if (char === escape) {
         text += raw[++index] ?? '';
@@ -106,11 +112,12 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
   const expand = (pending, body) => { if (!pending.literal && body !== '') result.push(...segments(body, dialect, { heredoc: true, outerScope: frames.at(-1) ?? outerScope })); };
   const pendingAt = depth => pendingDelimiters.findIndex(pending => pending.depth === depth);
   // Only a substitution nests heredoc reading; a bare group's newline still collects the bodies pending around it.
-  const heredocDepth = () => frames.filter(frame => frame.outer).length;
+  const heredocDepth = () => frames.at(-1)?.depth ?? 0;
   // Reads the bodies of the heredocs pending at the current depth, which begin after the newline at index; each runs to
   // the line that equals its delimiter (after leading tabs are removed, for <<-), or to the end of the command when it is
   // never terminated. Returns the index of the last character read.
   const readHeredocs = start => {
+    if (pendingDelimiters.length === 0) return start;
     const depth = heredocDepth();
     let index = start;
     let body = '';
@@ -139,21 +146,19 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
   const flush = () => { if (inWord && !dropWord) segment.words.push(word); if (inWord) dropWord = false; word = ''; inWord = false; };
   // A segment inside an arithmetic frame, groups included, holds an expression, never a command; a substitution inside
   // the expression holds commands again.
-  const inExpression = () => {
-    for (let at = frames.length - 1; at >= 0; at--) {
-      if (frames[at].arithmetic) return true;
-      if (frames[at].outer) return false;
-    }
-
-    return false;
-  };
+  const inExpression = () => frames.at(-1)?.expression ?? false;
   const cut = pipedIn => { flush(); if (!inExpression()) result.push(segment); segment = newSegment(pipedIn); dropWord = false; };
   // Whether the segment holds word text, so a frame opened now sits inside it.
   const started = () => word !== '' || segment.words.length > 0;
   const open = (closer, arithmetic, splice, start) => {
     const owner = splice || started() ? segment : null;
     if (!splice) cut(false);
-    frames.push({ quote, closer, arithmetic, start, parent: frames.at(-1) ?? outerScope, owner, outer: splice ? { segment, word, inWord, dropWord } : null });
+    // Each frame carries what its ancestors decide, so no check walks the stack: whether it holds an expression
+    // (arithmetic, or a group inside arithmetic) and how many substitutions it sits in.
+    const enclosing = frames.at(-1);
+    const expression = arithmetic || (!splice && (enclosing?.expression ?? false));
+    const depth = (enclosing?.depth ?? 0) + (splice ? 1 : 0);
+    frames.push({ quote, closer, arithmetic, expression, depth, start, parent: enclosing ?? outerScope, owner, outer: splice ? { segment, word, inWord, dropWord } : null });
     quote = null; segment = newSegment(false); word = ''; inWord = false; dropWord = false;
   };
   // The last frame a splice closed, and whether it opened at the start of a word, so a PowerShell comment right after
@@ -220,7 +225,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       flush();
       segment.stdinFed = true;
       if (command[index + 2] === '<') { dropWord = true; index += 2; continue; } // herestring: drop its operand
-      const match = /^<<(-?)\s*((?:'[^']*'|"[^"]*"|\\.|[^\s|&;<>'"\\])+)/.exec(command.slice(index));
+      const match = /^<<(-?)\s*((?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\.|[^\s|&;<>'"\\])+)/.exec(command.slice(index));
       if (match) { pendingDelimiters.push({ ...heredocDelimiter(match[2]), stripTabs: match[1] === '-', depth: heredocDepth() }); index += match[0].length - 1; }
       else index++;
       continue;
