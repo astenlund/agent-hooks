@@ -88,13 +88,19 @@ export function segments(command, dialect) {
   };
   const inArithmetic = () => frames.length > 0 && frames[frames.length - 1].arithmetic;
   // A comment runs to the end of its line, or, inside a backtick substitution, to its closing backtick, since
-  // bash reads the substitution's body before parsing it.
+  // bash reads the substitution's body before parsing it; an escaped backtick does not close it.
   const commentEnd = from => {
-    const ends = [command.indexOf('\n', from), frames.at(-1)?.closer === '`' ? command.indexOf('`', from) : -1].filter(end => end >= 0);
+    const inBackticks = frames.at(-1)?.closer === '`';
+    for (let index = from; index < command.length; index++) {
+      if (command[index] === '\n') return index;
+      if (inBackticks && command[index] === escape) index++;
+      else if (inBackticks && command[index] === '`') return index;
+    }
 
-    return ends.length > 0 ? Math.min(...ends) : command.length;
+    return command.length;
   };
-  const atWordStart = () => word === '' && !inWord;
+  // A comment starts where a word would: in PowerShell that includes right after a closing ) or }, which ends a token.
+  const atWordStart = index => (word === '' && !inWord) || (blocks && /[)}]/.test(command[index - 1] ?? '') && command[index - 2] !== escape);
   for (let index = 0; index < command.length; index++) {
     const char = command[index];
     if (quote) {
@@ -113,8 +119,8 @@ export function segments(command, dialect) {
       continue;
     }
     // A # that starts a word opens a comment in both dialects, so its text is never read as commands; inside a word, as in $# or a#b, it is literal.
-    if (char === '#' && atWordStart() && !inArithmetic()) { index = commentEnd(index) - 1; continue; }
-    if (blocks && char === '<' && command[index + 1] === '#' && atWordStart()) { // a PowerShell <# block comment #>
+    if (char === '#' && atWordStart(index) && !inArithmetic()) { index = commentEnd(index) - 1; continue; }
+    if (blocks && char === '<' && command[index + 1] === '#' && atWordStart(index)) { // a PowerShell <# block comment #>
       const end = command.indexOf('#>', index + 2);
       index = end < 0 ? command.length : end + 1;
       continue;
