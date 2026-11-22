@@ -23,7 +23,7 @@ echo '{"tool_name":"Bash","tool_input":{"command":"cd x && ls"}}' | env -u CLAUD
 
 The `env -u` keeps the session's `CLAUDE_NO_CD_CHAINS` out of the probe, as the test does, since a value of `0` or `false` makes `no-cd-chains` allow everything.
 
-After a parsing change, replay the local transcripts with `tools/mine-transcripts.mjs` and `tools/replay-transcripts.mjs`, as the README's Development section shows, and check the newly refused list for ordinary commands; write their output only under `.tmp/`, since it holds the user's own commands, and generalize any command copied from it into a test.
+After a parsing change, replay the local transcripts with `tools/mine-transcripts.mjs` and `tools/replay-transcripts.mjs`, as the README's Development section shows, and check the newly refused list for ordinary commands. Both tools write only to `.tmp/<run>/` through `tools/run-folder.mjs`, since their output holds the user's own commands; generalize any command copied from it into a test.
 
 These hooks are typically installed and active in the session working on them, so a command matching a blocked shape is refused for you too; put new shapes in the test tables rather than typing them as live commands.
 
