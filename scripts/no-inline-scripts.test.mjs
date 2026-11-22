@@ -20,6 +20,8 @@ const blocked = [
   "cat <<$(true)\nhello\n$(true)\nnode -e '1'",
   'a=($(node -e "1"))',
   "cat <<$((1+2))\nhello\n$((1+2))\nnode -e '1'",
+  "cat <<$(((1+2)))\nhello\n$(((1+2)))\nnode -e '1'",
+  "printf '%s\\n' ${marker:- # heading}; node -e '1'",
   // node family: inline flags in every position and quoting the shell allows
   'node -e "const r=JSON.parse(require(\'fs\').readFileSync(0,\'utf8\'));console.log(r.x)"',
   'cat out.json | node -e "const r=JSON.parse(require(\'fs\').readFileSync(0,\'utf8\'));console.log(r)"',

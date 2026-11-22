@@ -48,6 +48,10 @@ const blocked = [
   'cat <<$((1+2))\nhello\n$((1+2))\ncd .; pwd',
   'cat <<$(echo "x")\nhello\n$(echo "x")\ncd .; pwd',
   'cat <<EOF\nEO\\\r\nF\ncd .; pwd',
+  'cat <<$(((1+2)))\nhello\n$(((1+2)))\ncd .; pwd',
+  "cat <<$(echo')')\nhello\n$(echo')')\ncd .; pwd",
+  "printf '%s\\n' ${marker:- # heading}; cd C:/Git/x",
+  'echo ${x:-$(cd C:/Git/x; pwd)}',
   'cat <<EOF\ntext\nEOF\r\ncd .; pwd',
   'a=($(cd C:/Git/x; pwd))',
   ['Set-Location . # note\rWrite-Output ok; Get-Location', 'PowerShell'],
@@ -164,6 +168,8 @@ const allowed = [
   "cat <<'EOF' | (\ncd .; pwd\nEOF\ncat\n)",
   // a PowerShell assignment's value is not a command word, and a Bash array literal holds values
   ["$label = 'Set-Location'; Write-Output $label", 'PowerShell'],
+  'echo ${x:- a; cd b}',
+  'cd ${TARGET:-C:/Git/x}',
   "commands=(cd pushd); printf '%s\\n' \"${commands[@]}\"",
   // arithmetic holds expressions, not commands
   'echo $((cd + 1))',

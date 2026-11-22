@@ -72,6 +72,9 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
   let inWord = heredoc;
   let quote = heredoc ? HEREDOC : null;
   let dropWord = heredoc;
+  // How many Bash parameter expansions (${ ... }) the current word is inside; their text is one word, so a blank, # or ;
+  // there is literal, while a substitution inside still runs.
+  let braces = 0;
   // Heredocs whose bodies are still to come, queued by the substitution depth they were written at, since a body starts
   // after the next newline at that depth: one written before a substitution that spans lines starts after the substitution.
   const pendingDelimiters = new Map();
@@ -79,6 +82,48 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     const queue = pendingDelimiters.get(pending.depth) ?? [];
     queue.push(pending);
     pendingDelimiters.set(pending.depth, queue);
+  };
+  // The index of the ) closing the $( that starts at from in text, skipping quoted text and escapes, or the last index
+  // when it is never closed.
+  const substitutionEnd = (text, from) => {
+    let depth = 0;
+    for (let index = from + 1; index < text.length; index++) {
+      const char = text[index];
+      if (char === escape) index++;
+      else if (char === "'") {
+        const close = text.indexOf("'", index + 1);
+        if (close < 0) return text.length - 1;
+        index = close;
+      } else if (char === '"') {
+        for (index++; index < text.length && text[index] !== '"'; index++) if (text[index] === escape) index++;
+      } else if (char === '(') depth++;
+      else if (char === ')' && --depth === 0) return index;
+    }
+
+    return text.length - 1;
+  };
+  // The delimiter word after the << at from: quoted fragments, escapes and $( ... ) fragments in any order, up to a blank,
+  // an operator or a bare parenthesis. Null when no word follows.
+  const delimiterWord = from => {
+    let index = from + 2;
+    const stripTabs = command[index] === '-';
+    if (stripTabs) index++;
+    while (command[index] === ' ' || command[index] === '\t') index++;
+    const start = index;
+    for (; index < command.length; index++) {
+      const char = command[index];
+      if (char === "'") {
+        const close = command.indexOf("'", index + 1);
+        index = close < 0 ? command.length : close;
+      } else if (char === '"') {
+        for (index++; index < command.length && command[index] !== '"'; index++) if (command[index] === escape) index++;
+      } else if (char === escape) index++;
+      else if (char === '$' && command[index + 1] === '(') index = substitutionEnd(command, index);
+      else if (/[\s|&;<>()]/.test(char)) break;
+    }
+    const end = Math.min(index, command.length);
+
+    return end > start ? { raw: command.slice(start, end), stripTabs, end: end - 1 } : null;
   };
   // Bash removes quotes and backslashes from a heredoc delimiter, and quoting any part of it keeps the body literal.
   const heredocDelimiter = raw => {
@@ -102,14 +147,9 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
         literal = true;
       } else if (char === '$' && raw[index + 1] === '(') {
         // A $( ... ) in a delimiter word is not expanded or unquoted: its text, quotes included, is kept as written.
-        let depth = 0;
-        let inner = index;
-        for (; inner < raw.length; inner++) {
-          if (raw[inner] === '(') depth++;
-          else if (raw[inner] === ')' && --depth === 0) break;
-        }
-        text += raw.slice(index, inner + 1);
-        index = inner;
+        const close = substitutionEnd(raw, index);
+        text += raw.slice(index, close + 1);
+        index = close;
       } else if (char === escape && raw[index + 1] === '\n') {
         index++; // a line continuation is removed before the word is read, so it neither adds text nor quotes the delimiter
       } else if (char === escape) {
@@ -185,8 +225,8 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     const expression = arithmetic || value || (!splice && (enclosing?.expression ?? false));
     const arithmeticOperators = arithmetic || operators || (!splice && (enclosing?.arithmeticOperators ?? false));
     const depth = (enclosing?.depth ?? 0) + (splice ? 1 : 0);
-    frames.push({ quote, closer, arithmetic, expression, arithmeticOperators, depth, start, parent: enclosing ?? outerScope, owner, outer: splice ? { segment, word, inWord, dropWord } : null });
-    quote = null; segment = newSegment(false); word = ''; inWord = false; dropWord = false;
+    frames.push({ quote, closer, arithmetic, expression, arithmeticOperators, depth, start, parent: enclosing ?? outerScope, owner, outer: splice ? { segment, word, inWord, dropWord, braces } : null });
+    quote = null; segment = newSegment(false); word = ''; inWord = false; dropWord = false; braces = 0;
   };
   // The last frame a splice closed, and whether it opened at the start of a word, so a PowerShell comment right after
   // a frame that stands as its own token is recognized while one after prefix$(x) stays part of the argument.
@@ -198,7 +238,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     segment.scope = frames.at(-1) ?? outerScope; // the segment cut opened continues after the frame
     if (!frame.outer) return;
     closedFrame = { end, startsWord: frame.outer.word === '' && !frame.outer.inWord };
-    ({ segment, word, inWord, dropWord } = frame.outer);
+    ({ segment, word, inWord, dropWord, braces } = frame.outer);
     word += frame.start === undefined ? 'SUBSTITUTION' : command.slice(frame.start, end + 1); inWord = true;
   };
   const inArithmetic = () => frames.length > 0 && frames[frames.length - 1].arithmetic;
@@ -236,6 +276,9 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       if (index + 1 < command.length) { word += unescape(command[++index]); inWord = true; }
       continue;
     }
+    if (substitutes && char === '$' && command[index + 1] === '{') { braces++; word += '${'; inWord = true; index++; continue; }
+    if (braces > 0 && char === '}') { braces--; word += char; continue; }
+    if (braces > 0 && char !== '$' && char !== '`') { word += char; continue; }
     // A # that starts a word opens a comment in both dialects, so its text is never read as commands; inside a word, as in $# or a#b, it is literal.
     if (char === '#' && atWordStart(index) && !amongArithmeticOperators()) { index = commentEnd(index) - 1; continue; }
     if (blocks && char === '<' && command[index + 1] === '#' && atWordStart(index)) { // a PowerShell <# block comment #>
@@ -252,8 +295,8 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       flush();
       segment.stdinFed = true;
       if (command[index + 2] === '<') { dropWord = true; index += 2; continue; } // herestring: drop its operand
-      const match = /^<<(-?)\s*((?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]|\$\((?:[^()]|\([^()]*\))*\)|[^\s|&;<>()'"\\])+)/.exec(command.slice(index));
-      if (match) { pend({ ...heredocDelimiter(match[2]), stripTabs: match[1] === '-', depth: heredocDepth() }); index += match[0].length - 1; }
+      const found = delimiterWord(index);
+      if (found) { pend({ ...heredocDelimiter(found.raw), stripTabs: found.stripTabs, depth: heredocDepth() }); index = found.end; }
       else index++;
       continue;
     }
