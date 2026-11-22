@@ -14,13 +14,6 @@ const MAX_MS = 2000;
 const MARKER = 'Blocked by no-sed-in-place hook';
 const REFUSES = process.platform === 'win32';
 const blocked = [
-  // a comment ends at its line
-  "ls # note\nsed -i 's/a/b/' file.txt",
-  // a heredoc ends at its delimiter after quote removal, and an unquoted body runs its substitutions
-  "cat <<\\EOF\ndata\nEOF\nsed -i 's/a/b/' file.txt",
-  "cat <<EOF > x.txt\n$(sed -i 's/a/b/' file.txt)\nEOF",
-  "(cat <<'EOF')\ntext\nEOF\nsed -i 's/a/b/' file.txt",
-  "(( 1 << 2 ))\nsed -i 's/a/b/' file.txt",
   // -i in every short-option spelling, with or without a backup suffix
   "sed -i 's/a/b/' file.txt",
   "sed -i.bak 's/a/b/' file.txt",
@@ -91,10 +84,6 @@ const blocked = [
   ["find . -exec sed -i 's/a/b/' {} ;", 'PowerShell'], // an unquoted ; ends the segment, and with it the action
 ];
 const allowed = [
-  // comment text is never read as commands
-  "ls # note; sed -i 's/a/b/' file.txt",
-  // a PowerShell assignment's value is not a command word
-  ["$isSed = 'sed' -in $tools", 'PowerShell'],
   // sed without in-place editing
   "sed 's/a/b/' file.txt",
   "sed -n '1,5p' file.txt",
