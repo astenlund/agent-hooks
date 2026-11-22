@@ -83,6 +83,18 @@ const blocked = [
   ["find . -exec sed -i 's/a/b/' '{}' ';'", 'PowerShell'],
   ["find . -exec sed -i 's/a/b/' {} ;", 'PowerShell'], // an unquoted ; ends the segment, and with it the action
 ];
+// Commands models actually issued (from Claude Code transcripts, paths and identifiers generalized) that this hook
+// must keep refusing on Windows; a reported slip is added here, and its fix is the narrowest change that catches it.
+const encountered = [
+  "sed -i 's/\"version\": \"3.3.39\"/\"version\": \"3.3.40\"/' C:/Git/x/.claude-plugin/plugin.json C:/Git/x/.codex-plugin/plugin.json",
+  "sed -i.bak 's/\"revision\": 1,/\"revision\": 8,/' C:/Git/x/.tmp/import.json; node C:/x/launcher/bootstrap.js",
+  "sed -i.bak 's/New-ExactLengthPath/Get-ExactLengthPath/g' C:/Git/x/tests/Measure.ps1 2>&1; echo skipped",
+  "sed -i 's/^func compareOrdinal(/func CompareOrdinal(/' C:/Git/x/helper/compare.go",
+  "D=C:/Git/x/.tmp/review; for f in brief-docs.md brief-code.md; do sed -i.bak 's#, the item,#,#' $D/$f; done; rm -f $D/*.bak",
+  "f=\"C:/x/scratchpad/Import-Tools.ps1\"; sed -i 's/1)),$/1))/' \"$f\"; pwsh -NoProfile -File \"$f\"",
+  "node -e 0 2>/dev/null; sed -i -e 's/\"host\": \"claude\",//' C:/Git/x/.tmp/skeptic.json; grep -n -A12 host C:/Git/x/.tmp/skeptic.json",
+  "sed -i.orig 's/j[.]closing && j[.]closing[.]docsReview/j.closing \\&\\& j.closing.docs/' C:/x/scratchpad/check.js",
+];
 const allowed = [
   // sed without in-place editing
   "sed 's/a/b/' file.txt",
@@ -138,7 +150,7 @@ const run = (entry, env = defaultEnv) => {
   const [command, tool] = Array.isArray(entry) ? entry : [entry, 'Bash'];
   return spawnHook(envelope(command, tool), env);
 };
-for (const entry of blocked) {
+for (const entry of [...blocked, ...encountered]) {
   const result = run(entry);
   const refused = result.status === 2 && result.stderr.includes(MARKER);
   if (REFUSES && !refused) { failures++; console.log('NOT BLOCKED:', JSON.stringify(entry), 'exit', result.status); }
@@ -182,5 +194,5 @@ for (const [name, input] of envelopes) {
   const result = spawnHook(input, defaultEnv);
   if (result.status !== 0) { failures++; console.log('ENVELOPE NOT PASSED THROUGH:', name, 'exit', result.status); }
 }
-console.log(`${blocked.length} blocked, ${allowed.length} allowed, ${switches.length} switch, ${envelopes.length} envelope cases; failures: ${failures}`);
+console.log(`${blocked.length} blocked, ${encountered.length} encountered, ${allowed.length} allowed, ${switches.length} switch, ${envelopes.length} envelope cases; failures: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

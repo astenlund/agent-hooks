@@ -46,7 +46,6 @@ const blocked = [
   '`cd C:/Git/x; make`',
   '"$(cd C:/Git/x && make)" && ls',
   // a directory change anywhere in the command, alongside anything else, before or after it
-  'd=C:/Git/x/.tmp/run; cd C:/Git/x 2>/dev/null; timeout 1500 codex exec - < $d/in.md > $d/out.jsonl; echo "exit $?"',
   'a=1 b=2; cd C:/Git/x && make',
   'd=$(pwd); cd C:/Git/x; ls',
   'a=1\nb=2\ncd C:/Git/x\nmake',
@@ -102,6 +101,33 @@ const blocked = [
   ['Set-Location($path); make', 'PowerShell'],
   ['@(Set-Location C:\\Git\\x; dotnet test); ls', 'PowerShell'],
 ];
+// Commands models actually issued (from Claude Code transcripts, paths and identifiers generalized) that this hook
+// must keep refusing; a reported slip is added here, and its fix is the narrowest change that catches it.
+const encountered = [
+  'd=C:/Git/x/.tmp/run; cd C:/Git/x 2>/dev/null; timeout 1500 codex exec resume 0000 -m model -c \'sandbox_mode="read-only"\' --json -o $d/review.md - < $d/resume.md > $d/review.jsonl 2> $d/review.err; echo "exit $?"',
+  'G="D:/Games/Some Game"; cd "$G" 2>/dev/null; stat -c \'%y %n\' "$G"/ReShade.*',
+  'cd C:/Git/x && grep -rn "pattern" src/a.ts src/b.ts | head -30',
+  'cd C:/Git/x; git status --short; git log --oneline -3',
+  'cd C:/Git/x/runtime && node --test --test-concurrency=1 test/cli.test.ts 2>&1 | tail -30',
+  'cd C:/Git/x/runtime 2>/dev/null; node --test C:/Git/x/runtime/test/a.test.ts 2>&1 | tail -40',
+  'cd /c/Git/x 2>/dev/null; timeout 590 node C:/Git/x/tools/pin.ts 2>&1 | tail -5',
+  'cd /dev/null 2>/dev/null; grep -rn "pattern" C:/Git/x/src --include=*.go | cut -c1-200',
+  'cd /dev/null 2>&1; grep -n "pattern" C:/Git/x/src/a.ts',
+  'cd /c && grep -n "pattern" C:/Git/x/README.md',
+  "cd C:/ ; git diff --no-index --word-diff=plain C:/x/a.md C:/x/b.md",
+  'cd C:/Git/x/.tmp/run 2>/dev/null; true',
+  'cd C:/Git/x/dev || exit 1',
+  'cd "C:/Git/x/.nightshift/runs/c/0000"; ls; wc -l context/diff.patch',
+  'cd C:/Git/x/.nightshift/runs/operations && ls -t | head -3 | while read d; do echo "== $d"; ls $d; done',
+  'cd C:/Git/x; for f in README.md docs/a.md; do grep -c "pattern" "$f"; done',
+  'mkdir -p C:/Git/x/.tmp/logs; cd C:/Git/x 2>/dev/null; node --test C:/Git/x/tests/a.test.js',
+  'for f in $(cd C:/Git/x/.nightshift 2>/dev/null; ls *.md); do echo "== $f"; done',
+  'for d in C:/Git/x/fixtures/*/; do (cd "$d" 2>/dev/null; true); find "$d" -type f; done',
+  ['Set-Location C:/Git/x; node node_modules/eslint/bin/eslint.js src/a.js', 'PowerShell'],
+  ['Set-Location C:/x/app; & "C:/x/tools/python.exe" -I scripts/a.py', 'PowerShell'],
+  ['Push-Location C:/Git/x/.tmp/check; try { node probe/a.cjs 2>&1 | Select-String \'"label\' } finally { Pop-Location }', 'PowerShell'],
+  ["$d='C:/Git/x/.tmp/run'; Push-Location C:/Git/x; try { node tools/release.js --write | Select-Object -Last 1 } finally { Pop-Location }", 'PowerShell'],
+];
 const allowed = [
   // a bare directory change restores a drifted working directory
   'cd C:/Git/x',
@@ -145,7 +171,7 @@ const run = (entry, env = defaultEnv) => {
   const [command, tool] = Array.isArray(entry) ? entry : [entry, 'Bash'];
   return spawnHook(envelope(command, tool), env);
 };
-for (const entry of blocked) {
+for (const entry of [...blocked, ...encountered]) {
   const result = run(entry);
   if (result.status !== 2 || !result.stderr.includes(MARKER)) { failures++; console.log('NOT BLOCKED:', JSON.stringify(entry), 'exit', result.status); }
   if (result.ms > MAX_MS) { failures++; console.log('SLOW:', JSON.stringify(entry), result.ms, 'ms'); }
@@ -183,5 +209,5 @@ for (const [name, input] of envelopes) {
   const result = spawnHook(input, defaultEnv);
   if (result.status !== 0) { failures++; console.log('ENVELOPE NOT PASSED THROUGH:', name, 'exit', result.status); }
 }
-console.log(`${blocked.length} blocked, ${allowed.length} allowed, ${switches.length} switch, ${envelopes.length} envelope cases; failures: ${failures}`);
+console.log(`${blocked.length} blocked, ${encountered.length} encountered, ${allowed.length} allowed, ${switches.length} switch, ${envelopes.length} envelope cases; failures: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -175,6 +175,25 @@ const blocked = [
   ['pwsh -Command { node -e "1" }', 'PowerShell'],
   ['pwsh -Command { Get-Date; Get-Location', 'PowerShell'],
 ];
+// Commands models actually issued (from Claude Code transcripts, paths and identifiers generalized) that this hook
+// must keep refusing; a reported slip is added here, and its fix is the narrowest change that catches it.
+const encountered = [
+  'node -e "const r=require(\'C:/Git/x/.tmp/result.json\'); console.log(JSON.stringify({status:r.status,phase:r.phase}))"',
+  'node -p "Object.keys(require(\'C:/Git/x/.tmp/report.json\'))"',
+  'node -p "crypto.randomUUID()"',
+  'mkdir -p C:/Git/x/.tmp/session; node -e "console.log(crypto.randomUUID())"',
+  'node -e "require(\'C:/Git/x/internal/runtime/lifecycle.js\'); console.log(\'ok\')"',
+  'node -e 0 2>/dev/null; jq length C:/Git/x/.tmp/ops.json',
+  'ls C:/Git/x/.tmp/run; node -e "const c=require(\'C:/Git/x/.tmp/run/out.json\'); console.log(c.length)"',
+  'python -I -c "import json;d=json.load(open(\'C:/x/cron/jobs.json\',encoding=\'utf-8\'));[print(j[\'name\']) for j in d]"',
+  'C:/x/tools/python.exe -I -c "import ast,sys;print(sorted({n.names[0].name for n in ast.walk(ast.parse(open(sys.argv[1]).read())) if isinstance(n, ast.Import)}))" C:/x/a.py',
+  "python - <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF",
+  "pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString(); [Environment]::Version.ToString()'",
+  "timeout 170 bash -c 'until grep -qE \"^(OK|FAILED)\" C:/x/.tmp/log.txt; do sleep 5; done'",
+  ["pwsh -NoProfile -Command '. C:/x/scripts/Presence.ps1; Get-Reading | ConvertTo-Json -Compress'", 'PowerShell'],
+  ['Get-Item C:/x/state/Index.json | Select-Object Length, LastWriteTime; python -I -c "print(1)"', 'PowerShell'],
+  ['node -p "Object.keys(JSON.parse(require(\'fs\').readFileSync(\'C:/Git/x/.tmp/status.out\',\'utf8\')))"', 'PowerShell'],
+];
 const allowed = [
   'node --test tests/setup.test.js',
   'node skills/ready/ready.js C:/Git/nightshift',
@@ -300,7 +319,7 @@ const run = entry => {
   const result = spawnSync(process.execPath, [hook], { input: JSON.stringify({ tool_name: tool, tool_input: { command } }), encoding: 'utf8', windowsHide: true, timeout: 10000 });
   return { ...result, ms: Date.now() - started };
 };
-for (const entry of blocked) {
+for (const entry of [...blocked, ...encountered]) {
   const result = run(entry);
   if (result.status !== 2 || !result.stderr.includes('Blocked by no-inline-scripts hook')) { failures++; console.log('NOT BLOCKED:', JSON.stringify(entry), 'exit', result.status); }
   if (result.ms > MAX_MS) { failures++; console.log('SLOW:', JSON.stringify(entry), result.ms, 'ms'); }
@@ -325,5 +344,5 @@ for (const [name, input] of envelopes) {
   const result = spawnSync(process.execPath, [hook], { input, encoding: 'utf8', windowsHide: true, timeout: 10000 });
   if (result.status !== 0) { failures++; console.log('ENVELOPE NOT PASSED THROUGH:', name, 'exit', result.status); }
 }
-console.log(`${blocked.length} blocked, ${allowed.length} allowed, ${envelopes.length} envelope cases; failures: ${failures}`);
+console.log(`${blocked.length} blocked, ${encountered.length} encountered, ${allowed.length} allowed, ${envelopes.length} envelope cases; failures: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);
