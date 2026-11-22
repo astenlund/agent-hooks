@@ -44,6 +44,8 @@ Known shell-grammar gaps in the shared parser, found in review and left for late
 - Bypass: a substitution in a bare directory change's redirection operand, as in `cd . > "$(cd /; pwd)/log"`, is exempted like the directory argument.
 - Bypass: tabs of a `<<-` body are kept when its substitutions are scanned, so a plain `<<` heredoc nested inside never sees its tab-indented terminator.
 - Bypass: ANSI-C quoted delimiters (`<<$'EOF'`) keep the `$`, and a backslash-newline before an indented delimiter word yields an empty delimiter; either consumes the commands after the heredoc.
+- Bypass: `$((cmd); ...)` is read as arithmetic, though Bash parses it as a substitution holding a subshell when the arithmetic reading fails.
+- False refusal: text after PowerShell's stop-parsing token (`--%`) is parsed as commands.
 - False refusal: a PowerShell `#` right after a quoted token (`Write-Output 'ok'#note; ...`) is not read as a comment.
 - False refusal: text inside a PowerShell here-string (`@"..."@`) that contains a `"` is parsed as commands.
 - False refusal: no-inline-scripts' statement count treats the newline in a multi-line pipeline (`bash -c 'printf x |` then `cat'`) as a separator, and does not recognize comments.
