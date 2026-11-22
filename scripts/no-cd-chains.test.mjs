@@ -44,7 +44,7 @@ const blocked = [
   '$(cd C:/Git/x && make) && ls',
   '`cd C:/Git/x; make`',
   '"$(cd C:/Git/x && make)" && ls',
-  // a directory change anywhere in the command, not only first, is chained when commands follow it
+  // a directory change anywhere in the command, alongside anything else, before or after it
   'd=C:/Git/x/.tmp/run; cd C:/Git/x 2>/dev/null; timeout 1500 codex exec - < $d/in.md > $d/out.jsonl; echo "exit $?"',
   'a=1 b=2; cd C:/Git/x && make',
   'd=$(pwd); cd C:/Git/x; ls',
@@ -53,21 +53,35 @@ const blocked = [
   'x=1; ls; cd C:/Git/x; make',
   'cd C:/Git/x; echo $(pwd)',
   'ls && (cd C:/Git/x && make)',
-  // inside a substitution, a command after the directory change in the same subshell
+  'git status && cd C:/Git/x',
+  'd=C:/Git/x; cd $d',
+  'if [ -d C:/Git/x ]; then cd C:/Git/x; fi',
+  'test -d C:/Git/x && { cd C:/Git/x; }',
+  'for d in a b; do cd $d; done',
+  // a directory change in a substitution or group is not bare either, even confined to a subshell
+  '`cd C:/Git/x`',
   'x=$(cd C:/Git/x && pwd)',
   'x=$(cd C:/Git/x && pwd); echo $x',
   'echo "$(cd C:/Git/x; pwd)"',
+  '(cd C:/Git/x); ls',
+  'x=$(cd C:/Git/x); ls',
+  'echo "$(cd C:/Git/x)"; ls',
   ["$d = 'C:\\Git\\x'; Set-Location $d; dotnet test", 'PowerShell'],
   ["$d='C:\\Git\\x'; Set-Location $d; dotnet test", 'PowerShell'],
   ['[string]$d = (Join-Path $root src); Set-Location $d; dotnet build', 'PowerShell'],
   ['$env:X = 1; $n += 1; cd C:\\Git\\x; ls', 'PowerShell'],
   ['$d -eq 1; Set-Location C:\\Git\\x; ls', 'PowerShell'],
   ['Write-Host hi; & { Set-Location C:\\Git\\x; dotnet test }', 'PowerShell'],
-  // PowerShell frames share the runspace location, so a command after the frame is chained too
+  ["$d = 'C:\\Git\\x'; Set-Location $d", 'PowerShell'],
+  ['Write-Host (Get-Location); Set-Location C:\\Git\\x', 'PowerShell'],
   ['(Set-Location C:\\Git\\x); ls', 'PowerShell'],
   ['& { Set-Location C:\\Git\\x }; dotnet test', 'PowerShell'],
   ['"$(Set-Location C:\\Git\\x)"; ls', 'PowerShell'],
   ['Write-Host (Set-Location C:\\Git\\x); ls', 'PowerShell'],
+  ['dotnet test (Set-Location C:\\Git\\x)', 'PowerShell'],
+  ['& { Set-Location C:\\Git\\x }', 'PowerShell'],
+  ['. { Set-Location C:\\Git\\x }', 'PowerShell'],
+  ['@(Set-Location C:\\Git\\x)', 'PowerShell'],
   // the same shapes issued through the PowerShell tool, in its dialect
   ['Set-Location C:\\Git\\x; dotnet test', 'PowerShell'],
   ['set-location -Path C:\\Git\\x\nGet-ChildItem', 'PowerShell'],
@@ -88,7 +102,7 @@ const blocked = [
   ['@(Set-Location C:\\Git\\x; dotnet test); ls', 'PowerShell'],
 ];
 const allowed = [
-  // a standalone directory change restores a drifted working directory
+  // a bare directory change restores a drifted working directory
   'cd C:/Git/x',
   'cd "C:/Program Files/x"',
   'cd',
@@ -99,7 +113,6 @@ const allowed = [
   'pushd C:/Git/x',
   'cd "$(git rev-parse --show-toplevel)"',
   'cd `git rev-parse --show-toplevel`',
-  '`cd C:/Git/x`',
   // full paths, git -C, and text or commands that merely look like cd
   'git -C C:/Git/x status',
   'npm test --prefix C:/Git/x',
@@ -107,21 +120,9 @@ const allowed = [
   'git commit -m "cd x && ls"',
   'cdk deploy && ls',
   'ls; cat x',
-  // a directory change with nothing after it in its context, wherever it sits
-  'git status && cd C:/Git/x',
-  'd=C:/Git/x; cd $d',
-  // a Bash subshell confines its directory change, so a command after it is not chained
-  '(cd C:/Git/x); ls',
-  'x=$(cd C:/Git/x); ls',
-  'echo "$(cd C:/Git/x)"; ls',
-  ["$d = 'C:\\Git\\x'; Set-Location $d", 'PowerShell'],
   ['Set-Location C:\\Git\\x', 'PowerShell'],
-  ['& { Set-Location C:\\Git\\x }', 'PowerShell'],
-  ['. { Set-Location C:\\Git\\x }', 'PowerShell'],
   ['Set-Location (Join-Path $root src) -PassThru', 'PowerShell'],
   ['cd("C:\\Git\\x")', 'PowerShell'],
-  ['@(Set-Location C:\\Git\\x)', 'PowerShell'],
-  ['Write-Host (Get-Location); Set-Location C:\\Git\\x', 'PowerShell'],
   ['Set-Location -Path "C:\\Program Files\\x"', 'PowerShell'],
   ['Set-Location (Join-Path $root src)', 'PowerShell'],
   ['Push-Location C:\\Git\\x', 'PowerShell'],

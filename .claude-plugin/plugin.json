@@ -1,7 +1,7 @@
 {
   "name": "agent-hooks",
   "displayName": "Agent Hooks",
-  "description": "Claude Code hooks for disciplined agent sessions: refuses inline interpreter bodies so scripts are written to files and run by path, refuses a directory change chained into further commands, refuses an in-place sed edit in text mode on Windows so CRLF files keep their line endings, and warns as context usage crosses 50% and each 10% band above.",
+  "description": "Claude Code hooks for disciplined agent sessions: refuses inline interpreter bodies so scripts are written to files and run by path, refuses a directory change combined with other commands, refuses an in-place sed edit in text mode on Windows so CRLF files keep their line endings, and warns as context usage crosses 50% and each 10% band above.",
   "version": "1.5.0",
   "author": {
     "name": "Andreas Stenlund"
