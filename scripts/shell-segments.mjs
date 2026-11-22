@@ -98,10 +98,10 @@ export function segments(command, dialect) {
       else word += char;
       continue;
     }
-    // A PowerShell here-string, @' or @" starting a word (or right after an assignment's =, as in $text=@', $text =@' or [string]$text=@')
+    // A PowerShell here-string, @' or @" starting a word (or right after an assignment's =, as in $text=@', $text =@', [string]$text=@' or [string[]]$text=@')
     // and ending its line, closed by '@ or "@ starting a line, is one word of text, so a quote or command inside it is
     // data; subexpressions in an @" one are not inspected. The word test runs only at an @, keeping the scan linear.
-    if (blocks && char === '@' && (command[index + 1] === "'" || command[index + 1] === '"') && ((word === '' && !inWord) || /^(?:(?:\[[^\]]*\])*\$[\w:]+)?=$/.test(word)) && /^[ \t]*\r?\n/.test(command.slice(index + 2))) {
+    if (blocks && char === '@' && (command[index + 1] === "'" || command[index + 1] === '"') && ((word === '' && !inWord) || /^(?:(?:\[(?:[^[\]]|\[[^\]]*\])*\])*\$[\w:]+)?=$/.test(word)) && /^[ \t]*\r?\n/.test(command.slice(index + 2))) {
       const close = command.indexOf(`\n${command[index + 1]}@`, index + 2);
       word += command.slice(index + 2, close < 0 ? command.length : close);
       inWord = true;
