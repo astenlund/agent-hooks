@@ -168,6 +168,8 @@ const allowed = [
   ["$text =@'\nDon't run this from elsewhere.\nSet-Location C:/Git/repo\n'@\nSet-Content C:/Git/x/NOTES.md $text", 'PowerShell'],
   ["[string]$text=@'\nDon't run this from elsewhere.\nSet-Location C:/Git/repo\n'@\nSet-Content C:/Git/x/NOTES.md $text", 'PowerShell'],
   ["[string[]]$text=@'\nDon't run this from elsewhere.\nSet-Location C:/Git/repo\n'@\nSet-Content C:/Git/x/NOTES.md $text", 'PowerShell'],
+  ["$text +=@'\nDon't run this from elsewhere.\nSet-Location C:/Git/repo\n'@\nSet-Content C:/Git/x/NOTES.md $text", 'PowerShell'],
+  ["@{ Notes=@'\nDon't run this.\nSet-Location C:/Git/repo\n'@\n}", 'PowerShell'],
   ['git -C C:\\Git\\x status; dotnet build C:\\Git\\x', 'PowerShell'],
 ];
 
