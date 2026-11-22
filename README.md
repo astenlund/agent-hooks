@@ -95,7 +95,7 @@ node scripts/context-warn.test.mjs
 
 The first three spawn their hook by path with Bash and PowerShell tool envelopes for every blocked, encountered and allowed shape, check the exit code (and, for blocked and encountered shapes, the stderr marker), and fail any case in those tables slower than two seconds; the `no-cd-chains` and `no-sed-in-place` tests also check that their switch turns the hook off, and the `no-sed-in-place` test expects every case to pass off Windows. The last writes transcripts with usage records into an isolated temp directory and checks when the warning fires, including band deduplication, compaction and the window override. CI runs all four on Windows, and the `no-sed-in-place` test on Linux as well. Every release that changes `hooks` or `scripts` needs a version increase in `.claude-plugin/plugin.json`, since the marketplace update check compares that field.
 
-To check a parsing change against real use, replay your own Claude Code history through the hooks in the checkout. Both tools take a run name and keep their files in `.tmp/<run>/`, created as needed, since the output holds commands from your sessions and `.tmp/` is git-ignored; give each run its own name:
+To check a parsing change against real use, replay your own Claude Code history through the hooks in the checkout. Both tools take a run name (lowercase letters, digits, `.`, `_` and `-`, not ending in `.`, so that no two names share a folder on Windows) and keep their files in `.tmp/<run>/`, created as needed, since the output holds commands from your sessions and `.tmp/` is git-ignored; give each run its own name:
 
 ```
 node tools/mine-transcripts.mjs replay-1
