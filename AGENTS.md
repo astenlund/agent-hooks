@@ -45,7 +45,11 @@ Known shell-grammar gaps in the shared parser, found in review and left for late
 - Bypass: tabs of a `<<-` body are kept when its substitutions are scanned, so a plain `<<` heredoc nested inside never sees its tab-indented terminator.
 - Bypass: ANSI-C quoted delimiters (`<<$'EOF'`) keep the `$`, and a backslash-newline before an indented delimiter word yields an empty delimiter; either consumes the commands after the heredoc.
 - Bypass: `$((cmd); ...)` is read as arithmetic, though Bash parses it as a substitution holding a subshell when the arithmetic reading fails.
+- Bypass: a PowerShell assignment hides the command on its right, as in `$null = Set-Location x; Get-Location`. Skipping the `$x =` prefix was tried and reverted: it also exposed assigned values as command words, so `$isSed = 'sed' -in $tools` was refused, and a fix needs the parser to tell a command from an expression on the right.
+- Bypass: PowerShell dot invocation (`. 'Set-Location' x; Get-Location`) leaves `.` as the command word.
+- Bypass: a bare carriage return ends a PowerShell comment but does not separate the commands around it.
 - False refusal: text after PowerShell's stop-parsing token (`--%`) is parsed as commands.
+- False refusal: a quoted PowerShell string at command position is read as a command word, as in a block that only yields `'cd'` or an expression such as `'node' -eq '-e'`; a quote-tracking rule was tried and reverted because a quoted command name behind `& ( ... )` then escaped.
 - False refusal: a PowerShell `#` right after a quoted token (`Write-Output 'ok'#note; ...`) is not read as a comment.
 - False refusal: text inside a PowerShell here-string (`@"..."@`) that contains a `"` is parsed as commands.
 - False refusal: no-inline-scripts' statement count treats the newline in a multi-line pipeline (`bash -c 'printf x |` then `cat'`) as a separator, and does not recognize comments.
