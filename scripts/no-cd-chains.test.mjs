@@ -44,6 +44,15 @@ const blocked = [
   '$(cd C:/Git/x && make) && ls',
   '`cd C:/Git/x; make`',
   '"$(cd C:/Git/x && make)" && ls',
+  // assignment-only statements ahead of the directory change do not hide it
+  'd=C:/Git/x/.tmp/run; cd C:/Git/x 2>/dev/null; timeout 1500 codex exec - < $d/in.md > $d/out.jsonl; echo "exit $?"',
+  'a=1 b=2; cd C:/Git/x && make',
+  'd=$(pwd); cd C:/Git/x; ls',
+  'a=1\nb=2\ncd C:/Git/x\nmake',
+  ["$d = 'C:\\Git\\x'; Set-Location $d; dotnet test", 'PowerShell'],
+  ["$d='C:\\Git\\x'; Set-Location $d; dotnet test", 'PowerShell'],
+  ['[string]$d = (Join-Path $root src); Set-Location $d; dotnet build', 'PowerShell'],
+  ['$env:X = 1; $n += 1; cd C:\\Git\\x; ls', 'PowerShell'],
   // the same shapes issued through the PowerShell tool, in its dialect
   ['Set-Location C:\\Git\\x; dotnet test', 'PowerShell'],
   ['set-location -Path C:\\Git\\x\nGet-ChildItem', 'PowerShell'],
@@ -86,7 +95,13 @@ const allowed = [
   // only the first segment is inspected
   'git status && cd C:/Git/x',
   'x=$(cd C:/Git/x && pwd)',
+  'x=$(cd C:/Git/x && pwd); echo $x',
   'echo "$(cd C:/Git/x; pwd)"',
+  // a directory change behind an assignment preamble is still standalone
+  'd=C:/Git/x; cd $d',
+  'x=1; ls; cd C:/Git/x; make',
+  ["$d = 'C:\\Git\\x'; Set-Location $d", 'PowerShell'],
+  ['$d -eq 1; Set-Location C:\\Git\\x; ls', 'PowerShell'],
   ['Set-Location C:\\Git\\x', 'PowerShell'],
   ['& { Set-Location C:\\Git\\x }', 'PowerShell'],
   ['. { Set-Location C:\\Git\\x }', 'PowerShell'],

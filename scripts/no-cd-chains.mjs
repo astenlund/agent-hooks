@@ -4,7 +4,8 @@
 // never drifts behind the agent's back. A standalone directory change, the
 // whole command on its own, passes: that is how a drifted working directory
 // is restored. The command is split by shell-segments.mjs, so wrappers,
-// keywords and assignments ahead of the command word are seen through, a
+// keywords and assignments ahead of the command word are seen through, as are
+// assignment-only statements ahead of the directory change, a
 // directory change leading a substitution or block that opens the command
 // (quoted, an @(...) array subexpression, or invoked with & or a dot) is
 // found, and a substitution or argument group inside the directory argument
@@ -13,7 +14,7 @@
 // match, when switched off, or on malformed input (fail-open). Registered by
 // the plugin's hooks/hooks.json; self-test: node scripts/no-cd-chains.test.mjs
 import { readFileSync } from 'node:fs';
-import { DIALECTS, baseName, commandWords, segments } from './shell-segments.mjs';
+import { DIALECTS, baseName, commandWords, isAssignment, segments } from './shell-segments.mjs';
 
 const DIRECTORY_CHANGES = new Set(['cd', 'pushd', 'chdir', 'set-location', 'sl', 'push-location']);
 const DISABLED_VALUES = new Set(['0', 'false']);
@@ -24,19 +25,44 @@ const nestedIn = (item, owner) => {
   return false;
 };
 
+// A statement that only assigns variables: every word a Bash assignment, or a
+// PowerShell variable (optionally type-cast) followed by an assignment operator.
+const PWSH_VARIABLE = /^(?:\[[^\]]*\])*\$[A-Za-z_][\w:]*/;
+const PWSH_OPERATOR = /^(?:[+\-*/%]|\?\?)?=/;
+const isAssignmentOnly = (words, dialect) => {
+  if (dialect !== DIALECTS.PowerShell) return words.every(isAssignment);
+  const variable = words[0].match(PWSH_VARIABLE)?.[0];
+  if (!variable) return false;
+  const rest = words[0].slice(variable.length);
+
+  return rest === '' ? PWSH_OPERATOR.test(words[1] ?? '') : PWSH_OPERATOR.test(rest);
+};
+
 // The first command the shell runs is the earliest segment that opens with a
 // word, since a segment opening with a substitution or block runs that frame's
-// commands first. It is refused when it is a directory change and any other
-// segment, outside its own arguments and outside the frames around it, follows.
+// commands first. Leading assignment-only statements, with the substitutions in
+// them, are a preamble passed over, so the directory change behind them is
+// still the first command. It is refused when it is a directory change and any
+// other segment, outside the preamble, its own arguments and the frames around
+// it, follows.
 function inspect(command, dialect) {
   if (typeof command !== 'string') return null;
   const found = segments(command, dialect);
-  const leading = found.filter(item => !item.opensWithFrame);
-  if (found.length < 2 || leading.length === 0) return null;
-  const first = leading.reduce((earliest, item) => (item.order < earliest.order ? item : earliest));
+  const leading = found.filter(item => !item.opensWithFrame).sort((a, b) => a.order - b.order);
+  const preamble = [];
+  const inPreamble = item => preamble.some(entry => item === entry || nestedIn(item, entry));
+  const first = leading.find(item => {
+    if (inPreamble(item)) return false;
+    if (!isAssignmentOnly(item.words, dialect)) return true;
+    preamble.push(item);
+
+    return false;
+  });
+  if (!first) return null;
   const words = commandWords(first.words);
   if (words.length === 0 || !DIRECTORY_CHANGES.has(baseName(words[0]))) return null;
-  if (!found.some(item => item !== first && !nestedIn(item, first) && !nestedIn(first, item))) return null;
+  if (!found.some(item => item !== first && !inPreamble(item) && !nestedIn(item, first) && !nestedIn(first, item))) return null;
+
   return first.words.join(' ').slice(0, 120);
 }
 
