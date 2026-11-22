@@ -94,3 +94,12 @@ node scripts/context-warn.test.mjs
 ```
 
 The first three spawn their hook by path with Bash and PowerShell tool envelopes for every blocked, encountered and allowed shape, check the exit code (and, for blocked and encountered shapes, the stderr marker), and fail any case slower than two seconds; the `no-cd-chains` and `no-sed-in-place` tests also check that their switch turns the hook off, and the `no-sed-in-place` test expects every case to pass off Windows. The last writes transcripts with usage records into an isolated temp directory and checks when the warning fires, including band deduplication, compaction and the window override. CI runs all four on Windows, and the `no-sed-in-place` test on Linux as well. Every release that changes `hooks` or `scripts` needs a version increase in `.claude-plugin/plugin.json`, since the marketplace update check compares that field.
+
+To check a parsing change against real use, replay your own Claude Code history through the hooks in the checkout. The output holds commands from your sessions, so keep it under the git-ignored `.tmp/` folder:
+
+```
+node tools/mine-transcripts.mjs .tmp/corpus.jsonl
+node tools/replay-transcripts.mjs .tmp/corpus.jsonl .tmp/report.md
+```
+
+The first collects every Bash and PowerShell call from the transcripts under `~/.claude/projects` (or a folder given as a second argument), with the hook that refused it, if any. The second runs each distinct command through the hooks it names something for and reports, per hook, the past refusals still made, those no longer made, and the commands newly refused. A newly refused command is either a form the hook now catches or an ordinary command it wrongly refuses; calls made before a hook was installed show up there too. A real refusal worth keeping goes into the hook's `encountered` table, with its paths and identifiers generalized.
