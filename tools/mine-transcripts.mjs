@@ -4,7 +4,7 @@
 // Usage: node tools/mine-transcripts.mjs <run> [projects folder, default ~/.claude/projects]
 import { createReadStream, createWriteStream, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { RunFolderError, runFolder } from './run-folder.mjs';
 
@@ -70,7 +70,8 @@ async function mine(root, output) {
   return { files: files.length, calls, refused };
 }
 
-const [run, root = join(homedir(), '.claude', 'projects')] = process.argv.slice(2);
+const [run, given = join(homedir(), '.claude', 'projects')] = process.argv.slice(2);
+const root = resolve(given); // an absolute root, so each file's project folder is the first segment after it
 let folder;
 try {
   folder = runFolder(run, { create: true });
