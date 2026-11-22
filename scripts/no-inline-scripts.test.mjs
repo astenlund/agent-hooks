@@ -12,6 +12,9 @@ const MAX_MS = 2000;
 const blocked = [
   // a comment ends at its line
   'ls # note\nnode -e "1"',
+  // a heredoc ends at its delimiter after quote removal, and an unquoted body runs its substitutions
+  'cat <<\\EOF\ndata\nEOF\nnode -e "1"',
+  'cat <<EOF > x.txt\n$(node -e "1")\nEOF',
   // node family: inline flags in every position and quoting the shell allows
   'node -e "const r=JSON.parse(require(\'fs\').readFileSync(0,\'utf8\'));console.log(r.x)"',
   'cat out.json | node -e "const r=JSON.parse(require(\'fs\').readFileSync(0,\'utf8\'));console.log(r)"',

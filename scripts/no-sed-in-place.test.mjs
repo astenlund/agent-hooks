@@ -16,6 +16,9 @@ const REFUSES = process.platform === 'win32';
 const blocked = [
   // a comment ends at its line
   "ls # note\nsed -i 's/a/b/' file.txt",
+  // a heredoc ends at its delimiter after quote removal, and an unquoted body runs its substitutions
+  "cat <<\\EOF\ndata\nEOF\nsed -i 's/a/b/' file.txt",
+  "cat <<EOF > x.txt\n$(sed -i 's/a/b/' file.txt)\nEOF",
   // -i in every short-option spelling, with or without a backup suffix
   "sed -i 's/a/b/' file.txt",
   "sed -i.bak 's/a/b/' file.txt",

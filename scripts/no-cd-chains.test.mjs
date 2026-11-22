@@ -19,6 +19,12 @@ const blocked = [
   'echo `echo ok # \\` x`; cd C:/Git/x',
   'echo $(pwd)#x; cd C:/Git/x',
   ['Set-Location C:\\Git\\x <# note #>; ls', 'PowerShell'],
+  // a heredoc ends at its delimiter after quote removal, and an unquoted body runs its substitutions
+  'cat <<\\EOF\nliteral text\nEOF\ncd C:/Git/x; pwd',
+  'cat <<E"O"F\nliteral text\nEOF\ncd C:/Git/x; pwd',
+  'cat <<EOF\n$(cd C:/Git/x; pwd)\nEOF',
+  'cat <<EOF\n`cd C:/Git/x`\nEOF',
+  'cat <<EOF\n$(cd C:/Git/x)',
   // a directory change chained by every separator the shell reads
   'cd C:/Git/x && npm test',
   'cd C:/Git/x; git status',
@@ -119,6 +125,11 @@ const allowed = [
   'echo `echo ok # \\`; cd .;`',
   ['& { Write-Output ok }# note; Set-Location .', 'PowerShell'],
   ["Write-Output $('sub')# note; Set-Location .", 'PowerShell'],
+  // a quoted heredoc body is literal, and an unquoted one only runs its substitutions
+  "cat <<'EOF' > x.txt\n$(cd C:/Git/x; pwd)\nEOF",
+  'cat <<\\EOF > x.txt\n$(cd C:/Git/x; pwd)\nEOF',
+  'cat <<EOF > x.txt\n"quoted" text with cd x; ls\nEOF',
+  'cat <<EOF > x.txt\nprice \\$(cd x; pwd)\nEOF',
   // a bare directory change restores a drifted working directory
   'cd C:/Git/x',
   'cd "C:/Program Files/x"',
