@@ -25,6 +25,12 @@ const blocked = [
   'cat <<EOF\n$(cd C:/Git/x; pwd)\nEOF',
   'cat <<EOF\n`cd C:/Git/x`\nEOF',
   'cat <<EOF\n$(cd C:/Git/x)',
+  "cat <<'EOF' \"$(printf x\ncd .; pwd\n)\"\ndata\nEOF",
+  "cat <<'EO'F\ndata\nEOF\ncd .; pwd",
+  'cat <<EOF\nEO\\\nF\ncd .; pwd',
+  'cat <<-EOF\n\tdata\n\tEOF\ncd .; pwd',
+  'echo $(( $(cd C:/Git/x; pwd) + 1 ))',
+  ['Write-Output prefix$(Write-Output ok)#suffix; Set-Location .', 'PowerShell'],
   // a directory change chained by every separator the shell reads
   'cd C:/Git/x && npm test',
   'cd C:/Git/x; git status',
@@ -130,6 +136,13 @@ const allowed = [
   'cat <<\\EOF > x.txt\n$(cd C:/Git/x; pwd)\nEOF',
   'cat <<EOF > x.txt\n"quoted" text with cd x; ls\nEOF',
   'cat <<EOF > x.txt\nprice \\$(cd x; pwd)\nEOF',
+  "cat <<'EOF' > x.txt\nEOF \ncd .; pwd\nEOF",
+  "cat <<'EOF' > x.txt\n\tEOF\ncd .; pwd\nEOF",
+  'cat <<EOF > x.txt\n$((cd + 1))\nEOF',
+  "git commit -m \"$(cat <<'EOF'\nfix: cd x; ls\nEOF\n)\"",
+  // arithmetic holds expressions, not commands
+  'echo $((cd + 1))',
+  'echo $(( (cd + 1) * 2 ))',
   // a bare directory change restores a drifted working directory
   'cd C:/Git/x',
   'cd "C:/Program Files/x"',
