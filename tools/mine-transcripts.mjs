@@ -49,9 +49,9 @@ async function mine(root, output) {
       if (!Array.isArray(content)) continue;
       for (const part of content) {
         // A call or result without an id cannot be paired, so it is left out rather than matched to the wrong one.
-        if (part?.type === 'tool_use' && typeof part.id === 'string' && (part.name === 'Bash' || part.name === 'PowerShell') && typeof part.input?.command === 'string') {
+        if (part?.type === 'tool_use' && typeof part.id === 'string' && part.id !== '' && (part.name === 'Bash' || part.name === 'PowerShell') && typeof part.input?.command === 'string') {
           pending.set(part.id, { tool: part.name, command: part.input.command, project, ts: entry.timestamp ?? null, refusedBy: null });
-        } else if (part?.type === 'tool_result' && typeof part.tool_use_id === 'string' && pending.has(part.tool_use_id)) {
+        } else if (part?.type === 'tool_result' && typeof part.tool_use_id === 'string' && part.tool_use_id !== '' && pending.has(part.tool_use_id)) {
           const call = pending.get(part.tool_use_id);
           pending.delete(part.tool_use_id);
           call.refusedBy = part.is_error ? (MARKER.exec(text(part.content))?.[1] ?? null) : null;
