@@ -98,6 +98,15 @@ export function segments(command, dialect) {
       else word += char;
       continue;
     }
+    // A PowerShell here-string, @' or @" ending its line and closed by '@ or "@ starting a line, is one word of text, so
+    // a quote or command inside it is data; subexpressions in an @" one are not inspected.
+    if (blocks && char === '@' && (command[index + 1] === "'" || command[index + 1] === '"') && /^[ \t]*\r?\n/.test(command.slice(index + 2))) {
+      const close = command.indexOf(`\n${command[index + 1]}@`, index + 2);
+      word += command.slice(index + 2, close < 0 ? command.length : close);
+      inWord = true;
+      index = close < 0 ? command.length : close + 2;
+      continue;
+    }
     if (char === "'" || char === '"') { quote = char; inWord = true; continue; }
     if (char === escape) {
       if (command[index + 1] === '\n') { index++; continue; }

@@ -101,6 +101,7 @@ const blocked = [
   ['cd("C:\\Git\\x"); npm test', 'PowerShell'],
   ['Set-Location($path); make', 'PowerShell'],
   ['@(Set-Location C:\\Git\\x; dotnet test); ls', 'PowerShell'],
+  ["$t = @'\nnotes\n'@; Set-Location C:\\Git\\x; ls", 'PowerShell'],
 ];
 // Commands models actually issued (from Claude Code transcripts, paths and identifiers generalized) that this hook
 // must keep refusing; a reported slip is added here, and its fix is the narrowest change that catches it.
@@ -160,6 +161,8 @@ const allowed = [
   ['Push-Location C:\\Git\\x', 'PowerShell'],
   ['dotnet test C:\\Git\\x', 'PowerShell'],
   ['Write-Host "cd x; ls"', 'PowerShell'],
+  ["Set-Content -Path C:/Git/x/NOTES.md -Value @'\nDon't run this from elsewhere.\nSet-Location C:/Git/repo\n'@", 'PowerShell'],
+  ['$text = @"\nRun: cd C:/Git/x; npm test\n"@; Set-Content C:/Git/x/a.md $text', 'PowerShell'],
   ['git -C C:\\Git\\x status; dotnet build C:\\Git\\x', 'PowerShell'],
 ];
 
