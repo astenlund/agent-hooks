@@ -2,6 +2,10 @@
 
 Claude Code hooks for disciplined agent sessions, packaged as a plugin so they register themselves and update automatically. Four hooks ship: `no-inline-scripts` refuses inline interpreter bodies in Bash and PowerShell calls, `no-cd-chains` refuses a directory change combined with other commands, `no-sed-in-place` refuses an in-place `sed` edit in text mode on Windows, and `context-warn` warns as session context usage crosses 50% and each 10% band above.
 
+## Threat model
+
+The `PreToolUse` hooks catch habits, not adversaries: they target the command forms models write by reflex, such as `cd dir && command`, `d=...; cd dir; command`, `node -e "..."` or `sed -i 's/a/b/' file`, and block them with a reason that steers the model to the better form. A bypass that needs an unusual spelling no model writes unprompted is out of scope, while refusing an ordinary command is a defect, so a parsing rule earns its place only when it catches a form models actually use without refusing commands they write innocently. Each hook's self-test keeps an `encountered` table of real commands taken from session transcripts that the hook must keep refusing; a reported slip is added there, and its fix is the narrowest change that catches it.
+
 ## Install
 
 The plugin is published through the `astenlund` marketplace:

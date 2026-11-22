@@ -2,7 +2,7 @@
 
 ## What this is
 
-A Claude Code plugin (`agent-hooks`, published through the `astenlund` marketplace) shipping four hooks: `no-inline-scripts`, `no-cd-chains` and `no-sed-in-place` (PreToolUse on the Bash and PowerShell tools) and `context-warn` (UserPromptSubmit). `README.md` is the authoritative description of each hook's blocked and allowed shapes, switches and failure behavior; keep it in step with any behavior change.
+A Claude Code plugin (`agent-hooks`, published through the `astenlund` marketplace) shipping four hooks: `no-inline-scripts`, `no-cd-chains` and `no-sed-in-place` (PreToolUse on the Bash and PowerShell tools) and `context-warn` (UserPromptSubmit). `README.md` is the authoritative description of each hook's blocked and allowed shapes, switches and failure behavior; keep it in step with any behavior change. Its Threat model section decides what a hook should catch: forms models write by reflex, not deliberate evasion, without refusing ordinary commands. Quote that section in every review brief so findings are ranked by it, and answer a reported slip by adding the command to the hook's `encountered` table with the narrowest fix that catches it.
 
 ## Commands
 
