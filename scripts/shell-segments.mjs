@@ -98,9 +98,9 @@ export function segments(command, dialect) {
       else word += char;
       continue;
     }
-    // A PowerShell here-string, @' or @" ending its line and closed by '@ or "@ starting a line, is one word of text, so
-    // a quote or command inside it is data; subexpressions in an @" one are not inspected.
-    if (blocks && char === '@' && (command[index + 1] === "'" || command[index + 1] === '"') && /^[ \t]*\r?\n/.test(command.slice(index + 2))) {
+    // A PowerShell here-string, @' or @" starting a word and ending its line, closed by '@ or "@ starting a line, is one
+    // word of text, so a quote or command inside it is data; subexpressions in an @" one are not inspected.
+    if (blocks && char === '@' && word === '' && !inWord && (command[index + 1] === "'" || command[index + 1] === '"') && /^[ \t]*\r?\n/.test(command.slice(index + 2))) {
       const close = command.indexOf(`\n${command[index + 1]}@`, index + 2);
       word += command.slice(index + 2, close < 0 ? command.length : close);
       inWord = true;

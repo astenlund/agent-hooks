@@ -102,6 +102,7 @@ const blocked = [
   ['Set-Location($path); make', 'PowerShell'],
   ['@(Set-Location C:\\Git\\x; dotnet test); ls', 'PowerShell'],
   ["$t = @'\nnotes\n'@; Set-Location C:\\Git\\x; ls", 'PowerShell'],
+  ["Write-Output prefix@'\nnotes'; Set-Location .; Get-Location", 'PowerShell'],
 ];
 // Commands models actually issued (from Claude Code transcripts, paths and identifiers generalized) that this hook
 // must keep refusing; a reported slip is added here, and its fix is the narrowest change that catches it.
