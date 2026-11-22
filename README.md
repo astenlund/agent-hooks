@@ -32,9 +32,9 @@ Accepted cost: one-expression uses of `node -e`, `node -p` and `python -c`, such
 
 ## no-cd-chains
 
-A `PreToolUse` hook on the Bash and PowerShell tools that refuses a command that contains a directory change (`cd`, `pushd`, `chdir`, `Set-Location`, `sl` or `Push-Location`, in any letter case) alongside anything else, wherever it sits, as in `cd C:/Git/x && npm test`, `Set-Location C:\Git\x; dotnet test` or `git status && cd C:/Git/x`. A directory change combined with other commands leaves the session's working directory somewhere the agent did not intend, so later relative paths resolve against the wrong place. Only a bare directory change, the whole command on its own, passes, because that is how a drifted working directory gets restored. On a match the hook exits 2 with a reason that tells the model to pass full paths to the command, or to use `git -C <dir>` for Git.
+A `PreToolUse` hook on the Bash and PowerShell tools that refuses a command that contains a directory change (`cd`, `pushd`, `chdir`, `Set-Location`, `sl` or `Push-Location`, in any letter case) alongside anything else, wherever it sits, as in `cd C:/Git/x && npm test`, `Set-Location C:\Git\x; dotnet test` or `git status && cd C:/Git/x`. A directory change combined with other commands can leave the session's working directory somewhere the agent did not intend, so later relative paths resolve against the wrong place. Only a bare directory change, the whole command on its own, passes, because that is how a drifted working directory gets restored. On a match the hook exits 2 with a reason that tells the model to pass full paths to the command, or to use `git -C <dir>` for Git.
 
-The command is split by the same parser `no-inline-scripts` uses, so the command word is found behind wrappers (`command`, `builtin`, `env`, `sudo` and the rest), keywords (`if`, `{`) and assignments, and every separator joins another command: `&&`, `||`, `;`, `&`, `|`, `|&` and a newline. A directory change is found inside groups, substitutions, blocks and compound commands too, quoted or not, including a PowerShell `@(...)` array subexpression and a block invoked by `&` or `.`, so `(cd C:/Git/x && make)`, `x=$(cd C:/Git/x && pwd)`, `if [ -d x ]; then cd x; fi` and `& { Set-Location C:\Git\x }` are all refused, even where a Bash subshell would confine the directory change. A substitution or argument group in the directory argument, as in `cd "$(git rev-parse --show-toplevel)"` or `Set-Location (Join-Path $root src) -PassThru`, is part of the directory change and passes. Fail-open: malformed input or an envelope from any other tool exits 0.
+The command is split by the same parser `no-inline-scripts` uses, so the command word is found behind wrappers (`command`, `builtin`, `env`, `sudo` and the rest), keywords (`if`, `{`) and assignments, and every separator that joins another command counts: `&&`, `||`, `;`, `&`, `|`, `|&` and a newline (a trailing one joins nothing, so `cd C:/Git/x;` passes). A directory change is found inside groups, substitutions, blocks and compound commands too, including a substitution inside double quotes, a PowerShell `@(...)` array subexpression and a block invoked by `&` or `.`, so `(cd C:/Git/x && make)`, `x=$(cd C:/Git/x && pwd)`, `if [ -d x ]; then cd x; fi` and `& { Set-Location C:\Git\x }` are all refused, even where a Bash subshell would confine the directory change. It is not found inside another shell's quoted body, such as a quoted `bash -c` or `pwsh -Command` string (a `{ scriptblock }` passed to `-Command` on the PowerShell tool is inspected like any other block). A substitution or argument group in the directory argument, as in `cd "$(git rev-parse --show-toplevel)"` or `Set-Location (Join-Path $root src) -PassThru`, is part of the directory change and passes, even when it changes directory itself. Fail-open: malformed input or an envelope from any other tool exits 0.
 
 The hook is on by default, since chaining a directory change into the command is a common failure mode across models. Where `cd dir && command` is a deliberate habit, turn it off in the `env` block of `~/.claude/settings.json`, which Claude Code passes to hook processes:
 
@@ -44,7 +44,7 @@ The hook is on by default, since chaining a directory change into the command is
 }
 ```
 
-The values `0` and `false` (in any letter case) turn it off; anything else, or no value, leaves it on.
+The values `0` and `false` (in any letter case, ignoring surrounding whitespace) turn it off; anything else, or no value, leaves it on.
 
 ## no-sed-in-place
 
@@ -60,7 +60,7 @@ The hook is on by default, since the Bash tool runs Git Bash on Windows. Where G
 }
 ```
 
-The values `0` and `false` (in any letter case) turn it off; anything else, or no value, leaves it on.
+The values `0` and `false` (in any letter case, ignoring surrounding whitespace) turn it off; anything else, or no value, leaves it on.
 
 ## context-warn
 
@@ -89,4 +89,4 @@ node scripts/no-sed-in-place.test.mjs
 node scripts/context-warn.test.mjs
 ```
 
-The first three spawn their hook by path with Bash and PowerShell tool envelopes for every blocked and allowed shape, check the exit code and stderr marker, and fail any blocked or allowed case slower than two seconds; the `no-cd-chains` and `no-sed-in-place` tests also check that their switch turns the hook off, and the `no-sed-in-place` test expects every case to pass off Windows. The last writes transcripts with usage records into an isolated temp directory and checks when the warning fires, including band deduplication, compaction and the window override. CI runs all four on Windows, and the `no-sed-in-place` test on Linux as well. Every release that changes `hooks` or `scripts` needs a version increase in `.claude-plugin/plugin.json`, since the marketplace update check compares that field.
+The first three spawn their hook by path with Bash and PowerShell tool envelopes for every blocked and allowed shape, check the exit code (and, for blocked shapes, the stderr marker), and fail any blocked or allowed case slower than two seconds; the `no-cd-chains` and `no-sed-in-place` tests also check that their switch turns the hook off, and the `no-sed-in-place` test expects every case to pass off Windows. The last writes transcripts with usage records into an isolated temp directory and checks when the warning fires, including band deduplication, compaction and the window override. CI runs all four on Windows, and the `no-sed-in-place` test on Linux as well. Every release that changes `hooks` or `scripts` needs a version increase in `.claude-plugin/plugin.json`, since the marketplace update check compares that field.
