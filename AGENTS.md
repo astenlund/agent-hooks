@@ -35,3 +35,16 @@ These hooks are typically installed and active in the session working on them, s
 ## Releasing
 
 Every release that changes `hooks/` or `scripts/` needs a version bump in `.claude-plugin/plugin.json`: the marketplace update check compares that field, so without it installed copies never update.
+
+## Ideas
+
+Known shell-grammar gaps in the shared parser, found in review and left for later:
+
+- Bypass: a `case` arm's `)` inside `$(...)` ends the substitution early, so `$(case x in x) cd .; pwd;; esac)` in an unquoted heredoc body hides its commands.
+- Bypass: a substitution in a bare directory change's redirection operand, as in `cd . > "$(cd /; pwd)/log"`, is exempted like the directory argument.
+- Bypass: tabs of a `<<-` body are kept when its substitutions are scanned, so a plain `<<` heredoc nested inside never sees its tab-indented terminator.
+- Bypass: ANSI-C quoted delimiters (`<<$'EOF'`) keep the `$`, and a backslash-newline before an indented delimiter word yields an empty delimiter; either consumes the commands after the heredoc.
+- False refusal: a PowerShell `#` right after a quoted token (`Write-Output 'ok'#note; ...`) is not read as a comment.
+- False refusal: text inside a PowerShell here-string (`@"..."@`) that contains a `"` is parsed as commands.
+- False refusal: no-inline-scripts' statement count treats the newline in a multi-line pipeline (`bash -c 'printf x |` then `cat'`) as a separator, and does not recognize comments.
+- Cost: deeply nested heredocs inside substitutions are rescanned at each enclosing level, and a long run of prefix assignments copies the word list per assignment, so a crafted command can take more than linear time.
