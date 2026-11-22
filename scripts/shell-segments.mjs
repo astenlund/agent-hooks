@@ -71,9 +71,14 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
   let inWord = heredoc;
   let quote = heredoc ? HEREDOC : null;
   let dropWord = heredoc;
-  // Heredocs whose bodies are still to come, each with the nesting depth it was written at, since its body starts after
-  // the next newline at that depth: one written before a substitution that spans lines starts after the substitution.
-  const pendingDelimiters = [];
+  // Heredocs whose bodies are still to come, queued by the substitution depth they were written at, since a body starts
+  // after the next newline at that depth: one written before a substitution that spans lines starts after the substitution.
+  const pendingDelimiters = new Map();
+  const pend = pending => {
+    const queue = pendingDelimiters.get(pending.depth) ?? [];
+    queue.push(pending);
+    pendingDelimiters.set(pending.depth, queue);
+  };
   // Bash removes quotes and backslashes from a heredoc delimiter, and quoting any part of it keeps the body literal.
   const heredocDelimiter = raw => {
     let text = '';
@@ -94,6 +99,8 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
         }
         index = inner;
         literal = true;
+      } else if (char === escape && raw[index + 1] === '\n') {
+        index++; // a line continuation is removed before the word is read, so it neither adds text nor quotes the delimiter
       } else if (char === escape) {
         text += raw[++index] ?? '';
         literal = true;
@@ -110,19 +117,20 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     return count % 2 === 1;
   };
   const expand = (pending, body) => { if (!pending.literal && body !== '') result.push(...segments(body, dialect, { heredoc: true, outerScope: frames.at(-1) ?? outerScope })); };
-  const pendingAt = depth => pendingDelimiters.findIndex(pending => pending.depth === depth);
   // Only a substitution nests heredoc reading; a bare group's newline still collects the bodies pending around it.
   const heredocDepth = () => frames.at(-1)?.depth ?? 0;
   // Reads the bodies of the heredocs pending at the current depth, which begin after the newline at index; each runs to
   // the line that equals its delimiter (after leading tabs are removed, for <<-), or to the end of the command when it is
   // never terminated. Returns the index of the last character read.
   const readHeredocs = start => {
-    if (pendingDelimiters.length === 0) return start;
     const depth = heredocDepth();
+    const queue = pendingDelimiters.get(depth);
+    if (!queue) return start;
+    pendingDelimiters.delete(depth);
     let index = start;
     let body = '';
-    for (let at = pendingAt(depth); at >= 0 && index < command.length; at = pendingAt(depth)) {
-      const pending = pendingDelimiters[at];
+    while (queue.length > 0 && index < command.length) {
+      const pending = queue[0];
       let end = command.indexOf('\n', index + 1);
       let logical = command.slice(index + 1, end < 0 ? command.length : end);
       while (!pending.literal && end >= 0 && continues(logical)) {
@@ -131,13 +139,13 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
         end = next;
       }
       if ((pending.stripTabs ? logical.replace(/^\t+/, '') : logical) === pending.delimiter) {
-        expand(pendingDelimiters.splice(at, 1)[0], body);
+        expand(queue.shift(), body);
         body = '';
       } else body += `${logical}\n`; // joined, as bash expands it
       index = end < 0 ? command.length : end;
     }
-    for (let at = pendingAt(depth); at >= 0; at = pendingAt(depth)) {
-      expand(pendingDelimiters.splice(at, 1)[0], body);
+    while (queue.length > 0) {
+      expand(queue.shift(), body);
       body = '';
     }
 
@@ -225,8 +233,8 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       flush();
       segment.stdinFed = true;
       if (command[index + 2] === '<') { dropWord = true; index += 2; continue; } // herestring: drop its operand
-      const match = /^<<(-?)\s*((?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\.|[^\s|&;<>'"\\])+)/.exec(command.slice(index));
-      if (match) { pendingDelimiters.push({ ...heredocDelimiter(match[2]), stripTabs: match[1] === '-', depth: heredocDepth() }); index += match[0].length - 1; }
+      const match = /^<<(-?)\s*((?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]|[^\s|&;<>'"\\])+)/.exec(command.slice(index));
+      if (match) { pend({ ...heredocDelimiter(match[2]), stripTabs: match[1] === '-', depth: heredocDepth() }); index += match[0].length - 1; }
       else index++;
       continue;
     }

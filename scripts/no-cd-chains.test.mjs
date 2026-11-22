@@ -33,6 +33,8 @@ const blocked = [
   'cat <<"E\\\\OF"\ndata\nE\\OF\ncd .; pwd',
   'cat <<"E\\$OF"\ndata\nE$OF\ncd .; pwd',
   'cat <<"E\\"OF"\ndata\nE"OF\ncd .; pwd',
+  'cat <<EO\\\nF\ndata\nEOF\ncd .; pwd',
+  'cat <<EO\\\nF\n$(cd .; pwd)\nEOF',
   'cat <<EOF\n$\\\n(cd .; pwd)\nEOF',
   'echo $(( (1 << 2\n) ))\ncd .; pwd',
   ['$((Set-Location .)); Get-Location', 'PowerShell'],
