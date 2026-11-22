@@ -39,6 +39,7 @@ const blocked = [
   '(cd C:/Git/x && make)',
   // a substitution in the directory argument does not hide the chain after it
   'cd "$(git rev-parse --show-toplevel)" && npm test',
+  'cd "$(cd C:/Git/x && pwd)"; ls',
   'cd `git rev-parse --show-toplevel`; npm test',
   // a directory change inside a substitution or block that opens the command
   '$(cd C:/Git/x && make) && ls',
@@ -113,6 +114,7 @@ const allowed = [
   'pushd C:/Git/x',
   'cd "$(git rev-parse --show-toplevel)"',
   'cd `git rev-parse --show-toplevel`',
+  'cd "$(cd C:/Git/x && pwd)"',
   // full paths, git -C, and text or commands that merely look like cd
   'git -C C:/Git/x status',
   'npm test --prefix C:/Git/x',

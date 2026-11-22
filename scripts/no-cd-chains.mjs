@@ -30,11 +30,13 @@ const isDirectoryChange = item => {
   return words.length > 0 && DIRECTORY_CHANGES.has(baseName(words[0]));
 };
 
-// A directory change is bare when every other segment belongs to its own arguments.
+// A directory change is bare when every other segment belongs to its own arguments. The outermost one is
+// judged, since a directory change inside another's argument, as in cd "$(cd x && pwd)", is part of it.
 function inspect(command, dialect) {
   if (typeof command !== 'string') return null;
   const found = segments(command, dialect);
-  const change = found.find(isDirectoryChange);
+  const changes = found.filter(isDirectoryChange);
+  const change = changes.find(item => !changes.some(other => nestedIn(item, other)));
   if (!change || found.every(item => item === change || nestedIn(item, change))) return null;
 
   return change.words.join(' ').slice(0, 120);
