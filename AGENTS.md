@@ -35,3 +35,11 @@ These hooks are typically installed and active in the session working on them, s
 ## Releasing
 
 Every release that changes `hooks/` or `scripts/` needs a version bump in `.claude-plugin/plugin.json`: the marketplace update check compares that field, so without it installed copies never update.
+
+## Ideas
+
+False refusals the shared parser can still produce, none of them seen in a replay of every Bash and PowerShell call in the local Claude Code transcripts (2026-11-22); fix one when a real command hits it:
+
+- A `#` comment is not recognized, so a separator inside one cuts a segment, as in `git status # then; cd x`.
+- A quoted PowerShell string at command position is read as a command word, as in a block that only yields `'cd'`.
+- Text after PowerShell's stop-parsing token (`--%`) is parsed as commands.
