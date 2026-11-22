@@ -19,6 +19,8 @@ const blocked = [
   // a heredoc ends at its delimiter after quote removal, and an unquoted body runs its substitutions
   "cat <<\\EOF\ndata\nEOF\nsed -i 's/a/b/' file.txt",
   "cat <<EOF > x.txt\n$(sed -i 's/a/b/' file.txt)\nEOF",
+  "(cat <<'EOF')\ntext\nEOF\nsed -i 's/a/b/' file.txt",
+  "(( 1 << 2 ))\nsed -i 's/a/b/' file.txt",
   // -i in every short-option spelling, with or without a backup suffix
   "sed -i 's/a/b/' file.txt",
   "sed -i.bak 's/a/b/' file.txt",

@@ -38,6 +38,13 @@ const blocked = [
   'cat <<EOF\n$\\\n(cd .; pwd)\nEOF',
   'echo $(( (1 << 2\n) ))\ncd .; pwd',
   ['$((Set-Location .)); Get-Location', 'PowerShell'],
+  // a delimiter ends at a parenthesis, a bare (( )) has no heredocs but still runs commands, and an assignment runs its right side
+  "(cat <<'EOF')\ntext\nEOF\ncd .; pwd",
+  '(( 1 << 2 ))\ncd .; pwd',
+  '((cd C:/Git/x); ls)',
+  ['$null = Set-Location C:/Git; Get-Location', 'PowerShell'],
+  ['$x=Set-Location C:/Git; ls', 'PowerShell'],
+  ['[string]$p += Set-Location C:/Git; ls', 'PowerShell'],
   ['Write-Output prefix$(Write-Output ok)#suffix; Set-Location .', 'PowerShell'],
   // a directory change chained by every separator the shell reads
   'cd C:/Git/x && npm test',

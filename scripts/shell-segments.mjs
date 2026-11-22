@@ -155,18 +155,22 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
   // A segment inside an arithmetic frame, groups included, holds an expression, never a command; a substitution inside
   // the expression holds commands again.
   const inExpression = () => frames.at(-1)?.expression ?? false;
+  const amongArithmeticOperators = () => frames.at(-1)?.arithmeticOperators ?? false;
   const cut = pipedIn => { flush(); if (!inExpression()) result.push(segment); segment = newSegment(pipedIn); dropWord = false; };
   // Whether the segment holds word text, so a frame opened now sits inside it.
   const started = () => word !== '' || segment.words.length > 0;
-  const open = (closer, arithmetic, splice, start) => {
+  const open = (closer, arithmetic, splice, start, operators = false) => {
     const owner = splice || started() ? segment : null;
     if (!splice) cut(false);
     // Each frame carries what its ancestors decide, so no check walks the stack: whether it holds an expression
-    // (arithmetic, or a group inside arithmetic) and how many substitutions it sits in.
+    // (arithmetic, or a group inside arithmetic), whether << and # are arithmetic operators there (also inside a bare
+    // (( ... )), whose contents are still read as commands because bash runs ((cd x); ls) as nested subshells), and
+    // how many substitutions it sits in.
     const enclosing = frames.at(-1);
     const expression = arithmetic || (!splice && (enclosing?.expression ?? false));
+    const arithmeticOperators = arithmetic || operators || (!splice && (enclosing?.arithmeticOperators ?? false));
     const depth = (enclosing?.depth ?? 0) + (splice ? 1 : 0);
-    frames.push({ quote, closer, arithmetic, expression, depth, start, parent: enclosing ?? outerScope, owner, outer: splice ? { segment, word, inWord, dropWord } : null });
+    frames.push({ quote, closer, arithmetic, expression, arithmeticOperators, depth, start, parent: enclosing ?? outerScope, owner, outer: splice ? { segment, word, inWord, dropWord } : null });
     quote = null; segment = newSegment(false); word = ''; inWord = false; dropWord = false;
   };
   // The last frame a splice closed, and whether it opened at the start of a word, so a PowerShell comment right after
@@ -218,7 +222,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       continue;
     }
     // A # that starts a word opens a comment in both dialects, so its text is never read as commands; inside a word, as in $# or a#b, it is literal.
-    if (char === '#' && atWordStart(index) && !inExpression()) { index = commentEnd(index) - 1; continue; }
+    if (char === '#' && atWordStart(index) && !amongArithmeticOperators()) { index = commentEnd(index) - 1; continue; }
     if (blocks && char === '<' && command[index + 1] === '#' && atWordStart(index)) { // a PowerShell <# block comment #>
       const end = command.indexOf('#>', index + 2);
       index = end < 0 ? command.length : end + 1;
@@ -229,11 +233,11 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
       index = readHeredocs(index);
       continue;
     }
-    if (char === '<' && command[index + 1] === '<' && !inExpression()) {
+    if (char === '<' && command[index + 1] === '<' && !amongArithmeticOperators()) {
       flush();
       segment.stdinFed = true;
       if (command[index + 2] === '<') { dropWord = true; index += 2; continue; } // herestring: drop its operand
-      const match = /^<<(-?)\s*((?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]|[^\s|&;<>'"\\])+)/.exec(command.slice(index));
+      const match = /^<<(-?)\s*((?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]|[^\s|&;<>()'"\\])+)/.exec(command.slice(index));
       if (match) { pend({ ...heredocDelimiter(match[2]), stripTabs: match[1] === '-', depth: heredocDepth() }); index += match[0].length - 1; }
       else index++;
       continue;
@@ -255,7 +259,7 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
     if (char === '(') {
       const argument = blocks && started();
       if (argument) flush(); // the group ends the word before it, so cd($x) keeps cd as its command word
-      open(')', false, argument);
+      open(')', false, argument, undefined, substitutes && !argument && !started() && command[index + 1] === '(');
       continue;
     }
     if (substitutes && char === '`') { if (frames.length > 0 && frames[frames.length - 1].closer === '`') close(index); else open('`', false, true); continue; }
@@ -281,6 +285,17 @@ export function segments(command, dialect, { heredoc = false, outerScope = null 
 }
 
 export const isAssignment = word => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
+// A PowerShell assignment runs the command on its right: $x = cmd, [int]$x += cmd, or the operator attached, $x=cmd.
+const PWSH_TARGET = /^(?:\[[^\]]*\])*\$[A-Za-z_][\w:]*$/;
+const PWSH_OPERATOR = /^(?:[-+*/%]|\?\?)?=$/;
+const PWSH_ATTACHED = /^(?:\[[^\]]*\])*\$[A-Za-z_][\w:]*(?:[-+*/%]|\?\?)?=(.*)$/;
+const afterPwshAssignment = rest => {
+  if (PWSH_TARGET.test(rest[0]) && PWSH_OPERATOR.test(rest[1] ?? '')) return rest.slice(2);
+  const attached = PWSH_ATTACHED.exec(rest[0]);
+  if (!attached) return null;
+
+  return attached[1] === '' ? rest.slice(1) : [attached[1], ...rest.slice(1)];
+};
 export const isRedirection = word => /^(?:\d*[<>]{1,2}&?\d*|&>>?|\d*[<>]{1,2}&?\S+|&>>?\S+)$/.test(word);
 export const isOption = word => word.startsWith('-') && word !== '-';
 export const baseName = word => word.split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, '');
@@ -317,6 +332,8 @@ export function commandWords(words) {
   for (;;) {
     if (rest.length === 0) return rest;
     if (KEYWORDS.has(rest[0]) || isAssignment(rest[0])) { rest = rest.slice(1); continue; }
+    const assigned = afterPwshAssignment(rest);
+    if (assigned) { rest = assigned; continue; }
     const wrapper = WRAPPERS[baseName(rest[0])];
     if (!wrapper) return rest;
     rest = rest.slice(1);

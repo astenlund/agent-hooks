@@ -15,6 +15,9 @@ const blocked = [
   // a heredoc ends at its delimiter after quote removal, and an unquoted body runs its substitutions
   'cat <<\\EOF\ndata\nEOF\nnode -e "1"',
   'cat <<EOF > x.txt\n$(node -e "1")\nEOF',
+  "(cat <<'EOF')\ntext\nEOF\nnode -e \"1\"",
+  '(( 1 << 2 ))\nnode -e "1"',
+  ['$out = node -e "1"', 'PowerShell'],
   // node family: inline flags in every position and quoting the shell allows
   'node -e "const r=JSON.parse(require(\'fs\').readFileSync(0,\'utf8\'));console.log(r.x)"',
   'cat out.json | node -e "const r=JSON.parse(require(\'fs\').readFileSync(0,\'utf8\'));console.log(r)"',
