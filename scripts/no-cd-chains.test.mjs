@@ -166,6 +166,7 @@ const allowed = [
   ['$text = @"\nRun: cd C:/Git/x; npm test\n"@; Set-Content C:/Git/x/a.md $text', 'PowerShell'],
   ["$text=@'\nDon't run this from elsewhere.\nSet-Location C:/Git/repo\n'@\nSet-Content C:/Git/x/NOTES.md $text", 'PowerShell'],
   ["$text =@'\nDon't run this from elsewhere.\nSet-Location C:/Git/repo\n'@\nSet-Content C:/Git/x/NOTES.md $text", 'PowerShell'],
+  ["[string]$text=@'\nDon't run this from elsewhere.\nSet-Location C:/Git/repo\n'@\nSet-Content C:/Git/x/NOTES.md $text", 'PowerShell'],
   ['git -C C:\\Git\\x status; dotnet build C:\\Git\\x', 'PowerShell'],
 ];
 
