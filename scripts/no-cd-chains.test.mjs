@@ -147,6 +147,8 @@ const allowed = [
   'echo cd x && ls',
   'git commit -m "cd x && ls"',
   'cdk deploy && ls',
+  "printf '%s\\n' checking; command -v cd",
+  'command -V cd && ls',
   'ls; cat x',
   ['Set-Location C:\\Git\\x', 'PowerShell'],
   ['Set-Location (Join-Path $root src) -PassThru', 'PowerShell'],
