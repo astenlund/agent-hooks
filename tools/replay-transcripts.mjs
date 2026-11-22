@@ -27,7 +27,13 @@ function distinctCalls(corpusFile) {
   let total = 0;
   for (const line of readFileSync(corpusFile, 'utf8').split('\n')) {
     if (line === '') continue;
-    const call = JSON.parse(line);
+    let call;
+    try {
+      call = JSON.parse(line);
+    } catch {
+      continue; // a line an interrupted mining run left partly written carries no usable call
+    }
+    if (typeof call?.tool !== 'string' || typeof call.command !== 'string') continue;
     total++;
     const key = JSON.stringify([call.tool, call.command]);
     const entry = distinct.get(key) ?? { tool: call.tool, command: call.command, count: 0, refusedBy: new Set(), projects: new Set(), now: {} };
