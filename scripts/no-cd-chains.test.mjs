@@ -12,6 +12,11 @@ const hook = join(dirname(fileURLToPath(import.meta.url)), 'no-cd-chains.mjs');
 const MAX_MS = 2000;
 const MARKER = 'Blocked by no-cd-chains hook';
 const blocked = [
+  // a comment ends at its line, or at the backtick closing its substitution, and # inside a word is literal
+  'cd C:/Git/x # restore\nmake',
+  'cd `echo C:/Git/x # note`; make',
+  'echo $# && cd C:/Git/x',
+  ['Set-Location C:\\Git\\x <# note #>; ls', 'PowerShell'],
   // a directory change chained by every separator the shell reads
   'cd C:/Git/x && npm test',
   'cd C:/Git/x; git status',
@@ -103,6 +108,12 @@ const blocked = [
   ['@(Set-Location C:\\Git\\x; dotnet test); ls', 'PowerShell'],
 ];
 const allowed = [
+  // comment text is never read as commands
+  'cd C:/Git/x # restore; then run',
+  'git status # then; cd C:/Git/x; ls',
+  ['Write-Output ok # note; Set-Location .', 'PowerShell'],
+  ['Set-Location C:\\Git\\x <# note; ls #>', 'PowerShell'],
+  ['Get-ChildItem <# unclosed; Set-Location x', 'PowerShell'],
   // a bare directory change restores a drifted working directory
   'cd C:/Git/x',
   'cd "C:/Program Files/x"',

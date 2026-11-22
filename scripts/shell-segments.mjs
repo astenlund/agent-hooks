@@ -37,7 +37,7 @@ export const DIALECTS = {
 
 // Split into segments at unquoted |, |&, ||, &&, &, ;, newline, (, ), $(,
 // PowerShell's @( and backticks; split each segment into words, stripping
-// quotes. Heredoc bodies
+// quotes. Heredoc bodies and comments
 // are skipped so their content is never mistaken for commands; a herestring
 // operand is dropped and marks the segment as fed from stdin. Each segment
 // records its scope (the frame of the substitution, group or block enclosing
@@ -87,6 +87,14 @@ export function segments(command, dialect) {
     word += frame.start === undefined ? 'SUBSTITUTION' : command.slice(frame.start, end + 1); inWord = true;
   };
   const inArithmetic = () => frames.length > 0 && frames[frames.length - 1].arithmetic;
+  // A comment runs to the end of its line, or, inside a backtick substitution, to its closing backtick, since
+  // bash reads the substitution's body before parsing it.
+  const commentEnd = from => {
+    const ends = [command.indexOf('\n', from), frames.at(-1)?.closer === '`' ? command.indexOf('`', from) : -1].filter(end => end >= 0);
+
+    return ends.length > 0 ? Math.min(...ends) : command.length;
+  };
+  const atWordStart = () => word === '' && !inWord;
   for (let index = 0; index < command.length; index++) {
     const char = command[index];
     if (quote) {
@@ -102,6 +110,13 @@ export function segments(command, dialect) {
     if (char === escape) {
       if (command[index + 1] === '\n') { index++; continue; }
       if (index + 1 < command.length) { word += unescape(command[++index]); inWord = true; }
+      continue;
+    }
+    // A # that starts a word opens a comment in both dialects, so its text is never read as commands; inside a word, as in $# or a#b, it is literal.
+    if (char === '#' && atWordStart() && !inArithmetic()) { index = commentEnd(index) - 1; continue; }
+    if (blocks && char === '<' && command[index + 1] === '#' && atWordStart()) { // a PowerShell <# block comment #>
+      const end = command.indexOf('#>', index + 2);
+      index = end < 0 ? command.length : end + 1;
       continue;
     }
     if (char === '\n') {

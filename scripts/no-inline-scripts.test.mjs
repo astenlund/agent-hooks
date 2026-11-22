@@ -10,6 +10,8 @@ import { dirname, join } from 'node:path';
 const hook = join(dirname(fileURLToPath(import.meta.url)), 'no-inline-scripts.mjs');
 const MAX_MS = 2000;
 const blocked = [
+  // a comment ends at its line
+  'ls # note\nnode -e "1"',
   // node family: inline flags in every position and quoting the shell allows
   'node -e "const r=JSON.parse(require(\'fs\').readFileSync(0,\'utf8\'));console.log(r.x)"',
   'cat out.json | node -e "const r=JSON.parse(require(\'fs\').readFileSync(0,\'utf8\'));console.log(r)"',
@@ -176,6 +178,8 @@ const blocked = [
   ['pwsh -Command { Get-Date; Get-Location', 'PowerShell'],
 ];
 const allowed = [
+  // comment text is never read as commands
+  'ls # note; node -e "1"',
   'node --test tests/setup.test.js',
   'node skills/ready/ready.js C:/Git/nightshift',
   'node "C:/Users/me/.claude/plugins/cache/x/internal/runtime/cli.js" C:/Git/x C:/tmp/request.json',
