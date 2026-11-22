@@ -6,13 +6,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
-const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+// One plain segment that cannot end in a dot, since Windows drops a trailing dot and replay-1. would name replay-1.
+const NAME = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?$/;
 
 export class RunFolderError extends Error {}
 
 // Returns the run folder for name, creating it when create is set; refuses a name that is not one plain path segment.
 export function runFolder(name, { create = false } = {}) {
-  if (typeof name !== 'string' || !NAME.test(name)) throw new RunFolderError(`run name must be one plain path segment (letters, digits, '.', '_', '-'), got ${JSON.stringify(name)}`);
+  if (typeof name !== 'string' || !NAME.test(name)) throw new RunFolderError(`run name must be one plain path segment (letters, digits, '.', '_', '-', not ending in '.'), got ${JSON.stringify(name)}`);
   const folder = join(REPO, '.tmp', name);
   if (create) mkdirSync(folder, { recursive: true });
 
