@@ -41,13 +41,11 @@ export const DIALECTS = {
 // are skipped so their content is never mistaken for commands; a herestring
 // operand is dropped and marks the segment as fed from stdin. Each segment
 // records its scope (the frame of the substitution, group or block enclosing
-// it, or null at the top level), its order of appearance in the source, since
-// a substitution's segments are returned ahead of the segment it sits in, and
-// whether it opens with a frame rather than a word (an opening quote, or a
-// lone dot before a block, is not yet a word). Each frame records its parent
-// frame and its owner: the segment whose words opened it, which is every
-// substitution's and block's, and a group's written after a word, or null for
-// a group standing as a command.
+// it, or null at the top level); a substitution's segments are returned ahead
+// of the segment it sits in. Each frame records its parent frame and its
+// owner: the segment whose words opened it, which is every substitution's and
+// block's, and a group's written after a word, or null for a group standing
+// as a command.
 export function segments(command, dialect) {
   const { escape, substitutes, blocks, unescape } = dialect;
   const result = [];
@@ -62,8 +60,7 @@ export function segments(command, dialect) {
   // argument expression (Set-Location (Join-Path a b) -PassThru), so it
   // nests like a substitution and the words after it stay in the segment.
   const frames = [];
-  let created = 0;
-  const newSegment = pipedIn => ({ words: [], pipedIn, stdinFed: false, scope: frames.at(-1) ?? null, order: created++, opensWithFrame: false });
+  const newSegment = pipedIn => ({ words: [], pipedIn, stdinFed: false, scope: frames.at(-1) ?? null });
   let segment = newSegment(false);
   let word = '';
   let inWord = false;
@@ -73,14 +70,9 @@ export function segments(command, dialect) {
   const flush = () => { if (inWord && !dropWord) segment.words.push(word); if (inWord) dropWord = false; word = ''; inWord = false; };
   const cut = pipedIn => { flush(); result.push(segment); segment = newSegment(pipedIn); dropWord = false; };
   // Whether the segment holds word text, so a frame opened now sits inside it.
-  // A lone dot does not count before a block, which it invokes in the current
-  // scope as & does in a child scope.
-  const counts = (item, closer) => closer !== '}' || item !== '.';
-  const started = closer => (word !== '' && counts(word, closer)) || segment.words.some(item => counts(item, closer));
+  const started = () => word !== '' || segment.words.length > 0;
   const open = (closer, arithmetic, splice, start) => {
-    const begun = started(closer);
-    const owner = splice || begun ? segment : null;
-    if (splice && !begun) segment.opensWithFrame = true;
+    const owner = splice || started() ? segment : null;
     if (!splice) cut(false);
     frames.push({ quote, closer, arithmetic, start, parent: frames.at(-1) ?? null, owner, outer: splice ? { segment, word, inWord, dropWord } : null });
     quote = null; segment = newSegment(false); word = ''; inWord = false; dropWord = false;
@@ -146,7 +138,7 @@ export function segments(command, dialect) {
       continue;
     }
     if (char === '(') {
-      const argument = blocks && started(')');
+      const argument = blocks && started();
       if (argument) flush(); // the group ends the word before it, so cd($x) keeps cd as its command word
       open(')', false, argument);
       continue;
