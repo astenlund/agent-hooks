@@ -45,6 +45,12 @@ const blocked = [
   ['$null = Set-Location C:/Git; Get-Location', 'PowerShell'],
   ['$x=Set-Location C:/Git; ls', 'PowerShell'],
   ['[string]$p += Set-Location C:/Git; ls', 'PowerShell'],
+  ['$state = @{ Location = $null }; $state.Location = Set-Location . -PassThru; Get-Location', 'PowerShell'],
+  ["& 'Set-Location' C:\\Git\\x; ls", 'PowerShell'],
+  'cat <<$(true)\nhello\n$(true)\ncd .; pwd',
+  'cat <<EOF\ntext\nEOF\r\ncd .; pwd',
+  'a=($(cd C:/Git/x; pwd))',
+  ['Set-Location . # note\rWrite-Output ok; Get-Location', 'PowerShell'],
   ['Write-Output prefix$(Write-Output ok)#suffix; Set-Location .', 'PowerShell'],
   // a directory change chained by every separator the shell reads
   'cd C:/Git/x && npm test',
@@ -156,6 +162,10 @@ const allowed = [
   'cat <<EOF > x.txt\n$((cd + 1))\nEOF',
   "git commit -m \"$(cat <<'EOF'\nfix: cd x; ls\nEOF\n)\"",
   "cat <<'EOF' | (\ncd .; pwd\nEOF\ncat\n)",
+  // a quoted PowerShell string where a command would stand is a value, and a Bash array literal holds values
+  ["$label = 'Set-Location'; Write-Output $label", 'PowerShell'],
+  ["Get-Item . | ForEach-Object { 'cd' }", 'PowerShell'],
+  "commands=(cd pushd); printf '%s\\n' \"${commands[@]}\"",
   // arithmetic holds expressions, not commands
   'echo $((cd + 1))',
   'echo $(( (cd + 1) * 2 ))',

@@ -24,10 +24,15 @@ const nestedIn = (item, owner) => {
   return false;
 };
 
-const isDirectoryChange = item => {
+// In PowerShell a quoted string standing where a command would is a value, as in $label = 'cd', and names a command
+// only behind the & call operator; in Bash quote removal leaves "cd" a command word.
+const isDirectoryChange = (item, dialect) => {
   const words = commandWords(item.words);
+  if (words.length === 0 || !DIRECTORY_CHANGES.has(baseName(words[0]))) return false;
+  const at = item.words.length - words.length;
+  const quotedValue = dialect === DIALECTS.PowerShell && !item.called && item.words[at] === words[0] && item.quoted[at];
 
-  return words.length > 0 && DIRECTORY_CHANGES.has(baseName(words[0]));
+  return !quotedValue;
 };
 
 // A directory change is bare when every other segment belongs to its own arguments. The outermost one is
@@ -35,7 +40,7 @@ const isDirectoryChange = item => {
 function inspect(command, dialect) {
   if (typeof command !== 'string') return null;
   const found = segments(command, dialect);
-  const changes = found.filter(isDirectoryChange);
+  const changes = found.filter(item => isDirectoryChange(item, dialect));
   const change = changes.find(item => !changes.some(other => nestedIn(item, other)));
   if (!change || found.every(item => item === change || nestedIn(item, change))) return null;
 
