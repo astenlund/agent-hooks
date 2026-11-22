@@ -40,19 +40,34 @@ const blocked = [
   // a substitution in the directory argument does not hide the chain after it
   'cd "$(git rev-parse --show-toplevel)" && npm test',
   'cd `git rev-parse --show-toplevel`; npm test',
-  // a substitution or block that opens the command runs its leading directory change first
+  // a directory change inside a substitution or block that opens the command
   '$(cd C:/Git/x && make) && ls',
   '`cd C:/Git/x; make`',
   '"$(cd C:/Git/x && make)" && ls',
-  // assignment-only statements ahead of the directory change do not hide it
+  // a directory change anywhere in the command, not only first, is chained when commands follow it
   'd=C:/Git/x/.tmp/run; cd C:/Git/x 2>/dev/null; timeout 1500 codex exec - < $d/in.md > $d/out.jsonl; echo "exit $?"',
   'a=1 b=2; cd C:/Git/x && make',
   'd=$(pwd); cd C:/Git/x; ls',
   'a=1\nb=2\ncd C:/Git/x\nmake',
+  'git status && cd C:/Git/x && make',
+  'x=1; ls; cd C:/Git/x; make',
+  'cd C:/Git/x; echo $(pwd)',
+  'ls && (cd C:/Git/x && make)',
+  // inside a substitution, a command after the directory change in the same subshell
+  'x=$(cd C:/Git/x && pwd)',
+  'x=$(cd C:/Git/x && pwd); echo $x',
+  'echo "$(cd C:/Git/x; pwd)"',
   ["$d = 'C:\\Git\\x'; Set-Location $d; dotnet test", 'PowerShell'],
   ["$d='C:\\Git\\x'; Set-Location $d; dotnet test", 'PowerShell'],
   ['[string]$d = (Join-Path $root src); Set-Location $d; dotnet build', 'PowerShell'],
   ['$env:X = 1; $n += 1; cd C:\\Git\\x; ls', 'PowerShell'],
+  ['$d -eq 1; Set-Location C:\\Git\\x; ls', 'PowerShell'],
+  ['Write-Host hi; & { Set-Location C:\\Git\\x; dotnet test }', 'PowerShell'],
+  // PowerShell frames share the runspace location, so a command after the frame is chained too
+  ['(Set-Location C:\\Git\\x); ls', 'PowerShell'],
+  ['& { Set-Location C:\\Git\\x }; dotnet test', 'PowerShell'],
+  ['"$(Set-Location C:\\Git\\x)"; ls', 'PowerShell'],
+  ['Write-Host (Set-Location C:\\Git\\x); ls', 'PowerShell'],
   // the same shapes issued through the PowerShell tool, in its dialect
   ['Set-Location C:\\Git\\x; dotnet test', 'PowerShell'],
   ['set-location -Path C:\\Git\\x\nGet-ChildItem', 'PowerShell'],
@@ -92,16 +107,14 @@ const allowed = [
   'git commit -m "cd x && ls"',
   'cdk deploy && ls',
   'ls; cat x',
-  // only the first segment is inspected
+  // a directory change with nothing after it in its context, wherever it sits
   'git status && cd C:/Git/x',
-  'x=$(cd C:/Git/x && pwd)',
-  'x=$(cd C:/Git/x && pwd); echo $x',
-  'echo "$(cd C:/Git/x; pwd)"',
-  // a directory change behind an assignment preamble is still standalone
   'd=C:/Git/x; cd $d',
-  'x=1; ls; cd C:/Git/x; make',
+  // a Bash subshell confines its directory change, so a command after it is not chained
+  '(cd C:/Git/x); ls',
+  'x=$(cd C:/Git/x); ls',
+  'echo "$(cd C:/Git/x)"; ls',
   ["$d = 'C:\\Git\\x'; Set-Location $d", 'PowerShell'],
-  ['$d -eq 1; Set-Location C:\\Git\\x; ls', 'PowerShell'],
   ['Set-Location C:\\Git\\x', 'PowerShell'],
   ['& { Set-Location C:\\Git\\x }', 'PowerShell'],
   ['. { Set-Location C:\\Git\\x }', 'PowerShell'],
