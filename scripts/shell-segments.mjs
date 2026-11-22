@@ -204,8 +204,11 @@ export function commandWords(words) {
     if (KEYWORDS.has(rest[0]) || isAssignment(rest[0])) { rest = rest.slice(1); continue; }
     const wrapper = WRAPPERS[baseName(rest[0])];
     if (!wrapper) return rest;
-    // command -v and -V only report what a name resolves to; the name is not run.
-    if (baseName(rest[0]) === 'command' && /^-[A-Za-z]*[vV]/.test(rest[1] ?? '')) return [];
+    // command -v and -V, alone or among its other options (-p), only report what a name resolves to; the name is not run.
+    if (baseName(rest[0]) === 'command') {
+      const end = rest.findIndex((word, at) => at > 0 && !/^-[A-Za-z]+$/.test(word));
+      if (rest.slice(1, end < 0 ? rest.length : end).some(option => /[vV]/.test(option))) return [];
+    }
     rest = rest.slice(1);
     let positionals = wrapper.positionals ?? 0;
     while (rest.length > 0) {
