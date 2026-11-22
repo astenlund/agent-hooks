@@ -40,6 +40,9 @@ Every release that changes `hooks/` or `scripts/` needs a version bump in `.clau
 
 Known shell-grammar gaps in the shared parser, found in review and left for later:
 
+- Regression: a process substitution inside a Bash parameter default, as in `cat ${x:-<(node -e '1')}`, is swallowed as word text by the `${ ... }` handling and never inspected.
+- Regression: heredoc delimiters with quotes nested inside a `$( ... )` fragment (`$(echo"$(echo'"')")`) or with parentheses inside a `${ ... }` fragment (`${x:-a(b)}`) are misread, so the commands after the heredoc are consumed as body text.
+- Regression: a `#` inside a nested quote within a double-quoted parameter expansion (`"${x:-"a # b"}"`) is read as a comment, hiding the command that follows; nested quotes there also make `"${x:-"}; node -e 1"}"` a false refusal.
 - Bypass: a `case` arm's `)` inside `$(...)` ends the substitution early, so `$(case x in x) cd .; pwd;; esac)` in an unquoted heredoc body hides its commands.
 - Bypass: a substitution in a bare directory change's redirection operand, as in `cd . > "$(cd /; pwd)/log"`, is exempted like the directory argument.
 - Bypass: tabs of a `<<-` body are kept when its substitutions are scanned, so a plain `<<` heredoc nested inside never sees its tab-indented terminator.
