@@ -45,3 +45,4 @@ False refusals the shared parser can still produce, none of them seen in a repla
 - A `#` comment is not recognized, so a separator inside one cuts a segment, as in `git status # then; cd x`.
 - A quoted PowerShell string at command position is read as a command word, as in a block that only yields `'cd'`.
 - Text after PowerShell's stop-parsing token (`--%`) is parsed as commands.
+- A PowerShell hashtable literal is parsed as a scriptblock, so a key named like a directory change, as in `$aliases = @{ cd = 'Set-Location' }; $aliases.Keys`, is read as one.
